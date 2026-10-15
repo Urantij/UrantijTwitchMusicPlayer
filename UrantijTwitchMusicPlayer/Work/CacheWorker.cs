@@ -1,26 +1,20 @@
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.Extensions.Options;
 
 namespace UrantijTwitchMusicPlayer.Work;
 
 public class CacheWorker
 {
-    private readonly string[] _cacheLocations =
-    [
-        "/home/punky/Music/karina/stream/",
-        "/home/punky/Music/karina"
-    ];
+    private readonly string[] _cacheLocations;
 
-    private readonly string[] _allowedExtensions =
-    [
-        ".webm",
-        ".mp4",
-        ".mp3"
-    ];
+    private readonly string[] _allowedExtensions;
 
     private readonly CaseInsensitiveValueComparer _comparer = new();
 
-    public CacheWorker()
+    public CacheWorker(IOptions<MainConfig> mainOptions)
     {
+        _cacheLocations = mainOptions.Value.CacheAudioLocations;
+        _allowedExtensions = mainOptions.Value.AudioExtensions;
     }
 
     public string? Find(LinkInfo linkInfo)

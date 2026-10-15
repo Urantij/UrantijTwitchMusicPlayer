@@ -17,6 +17,19 @@ public class MainConfig
     public bool AutoStartMpv { get; set; } = true;
     public bool TryMpvExistingSocket { get; set; } = false;
 
+    public string[] CacheAudioLocations { get; set; } =
+    [
+        "/home/punky/Music/karina/stream/",
+        "/home/punky/Music/karina"
+    ];
+
+    public string[] AudioExtensions { get; set; } =
+    [
+        ".webm",
+        ".mp4",
+        ".mp3"
+    ];
+
     public string[] AllowedAudioLocations { get; set; } =
     [
         "/home/punky/Music/nicotine/",
