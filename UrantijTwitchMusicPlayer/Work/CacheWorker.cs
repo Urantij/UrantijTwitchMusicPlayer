@@ -13,7 +13,7 @@ public class CacheWorker
 
     public CacheWorker(IOptions<MainConfig> mainOptions)
     {
-        _cacheLocations = mainOptions.Value.CacheAudioLocations;
+        _cacheLocations = mainOptions.Value.AudioSearchLocations;
         _allowedExtensions = mainOptions.Value.AudioExtensions;
     }
 

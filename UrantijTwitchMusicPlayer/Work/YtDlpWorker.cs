@@ -1,10 +1,16 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Options;
 
 namespace UrantijTwitchMusicPlayer.Work;
 
 public class YtDlpWorker
 {
-    private readonly string _location = "/home/punky/Music/karina/stream/";
+    private readonly string _location;
+
+    public YtDlpWorker(IOptions<MainConfig> mainOptions)
+    {
+        _location = mainOptions.Value.AudioCacheLocation;
+    }
 
     public async Task<string> DownloadAsync(string url, CancellationToken cancellationToken = default)
     {

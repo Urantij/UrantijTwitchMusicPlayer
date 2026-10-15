@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Encodings.Web;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using UrantijTwitchMusicPlayer.Player;
