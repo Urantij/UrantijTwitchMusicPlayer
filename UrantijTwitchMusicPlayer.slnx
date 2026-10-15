@@ -1,0 +1,4 @@
+<Solution>
+    <Project Path="UrantijTwitchMusicPlayer.Shared/UrantijTwitchMusicPlayer.Shared.csproj"/>
+    <Project Path="UrantijTwitchMusicPlayer/UrantijTwitchMusicPlayer.csproj"/>
+</Solution>

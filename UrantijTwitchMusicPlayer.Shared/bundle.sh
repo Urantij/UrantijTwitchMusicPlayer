@@ -1,0 +1,1 @@
+dotnet ef migrations bundle -r linux-x64 --self-contained
