@@ -21,7 +21,7 @@ class Program
         {
             optionsBuilder.UseSqlite(builder.Configuration.GetConnectionString("db") ?? $"Data Source=db.sqlite;");
             // этого друга нужно закомментить перед первой CompiledModels компиляции, удачи!
-            // optionsBuilder.UseModel(DiscordBattleriteQueueEstimator.CompiledModels.MyPoorLilContextModel.Instance);
+            optionsBuilder.UseModel(UrantijTwitchMusicPlayer.CompiledModels.MyContextModel.Instance);
         });
 
         // Очень жаль, но нормального способа читать конфиги в aot тупо нет.

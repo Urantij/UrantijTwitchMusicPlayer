@@ -486,3 +486,4 @@ appsettings.json
 db.sqlite*
 efbundle
 mpvcache.txt
+CompiledModels
