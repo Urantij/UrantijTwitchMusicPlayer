@@ -1,1 +1,1 @@
-dotnet publish -c Release -r linux-x64 /p:EFOptimizeContext=false ./UrantijTwitchMusicPlayer/UrantijTwitchMusicPlayer.csproj
+dotnet publish -c Release -r linux-x64 /p:EFOptimizeContext=false ./UrantijTwitchMusicPlayer.csproj

@@ -9,6 +9,10 @@ public class MyContext : DbContext
     public DbSet<RequestModel> Requests { get; set; }
     public DbSet<TrackCachedData> TrackCache { get; set; }
 
+    public MyContext(DbContextOptions options) : base(options)
+    {
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         optionsBuilder.UseSqlite("Data Source=db.sqlite;");
