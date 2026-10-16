@@ -70,6 +70,11 @@ class Program
         // builder.Services.AddSingleton<MyConsole>();
         // builder.Services.AddHostedService<MyConsole>(p => p.GetRequiredService<MyConsole>());
 
+        builder.Services.ConfigureHttpJsonOptions(options =>
+        {
+            options.SerializerOptions.TypeInfoResolver = MyJsonSirContext.Default;
+        });
+
         var host = builder.Build();
 
         host.MapPost("/private/audio/track", AudioRoute.PostTrack);

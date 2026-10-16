@@ -35,4 +35,11 @@ public class MyContext : DbContext
             .WithOne(da => da.Request)
             .HasForeignKey<RequestApiData>(da => da.RequestId);
     }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        base.ConfigureConventions(configurationBuilder);
+
+        configurationBuilder.Conventions.Add(_ => new DateTimeOffsetAotConvention());
+    }
 }
