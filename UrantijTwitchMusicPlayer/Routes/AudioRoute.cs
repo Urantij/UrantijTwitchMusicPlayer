@@ -92,7 +92,20 @@ public class AudioRoute
 
         string data = await reader.ReadToEndAsync();
 
-        LinkInfo? linkInfo = linker.MaybeLink(data);
+        LinkInfo? linkInfo;
+
+        try
+        {
+            linkInfo = linker.MaybeLink(data);
+        }
+        catch (ForbiddenAudioFileLocationException)
+        {
+            return TypedResults.BadRequest("Тута нельзя файлы брать");
+        }
+        catch (AudioFileNotFoundException)
+        {
+            return TypedResults.BadRequest("Не нашли твой файл");
+        }
 
         if (linkInfo == null)
         {

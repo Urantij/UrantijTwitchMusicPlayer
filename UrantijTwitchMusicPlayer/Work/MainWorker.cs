@@ -106,7 +106,14 @@ public class MainWorker : IHostedService
             LinkInfo? linkInfo = null;
             foreach (string word in msg.text.Split(' '))
             {
-                linkInfo = _linker.MaybeLink(word);
+                try
+                {
+                    linkInfo = _linker.MaybeLink(word);
+                }
+                catch
+                {
+                    continue;
+                }
 
                 if (linkInfo != null)
                     break;

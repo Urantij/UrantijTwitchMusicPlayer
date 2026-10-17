@@ -37,6 +37,24 @@ public class Linker
 
     public LinkInfo? MaybeLink(string searchString)
     {
+        if (searchString.StartsWith('/'))
+        {
+            string? location = _allowedAudioLocations.FirstOrDefault(l => searchString.StartsWith(l));
+
+            if (location == null)
+                throw new ForbiddenAudioFileLocationException();
+
+            string path = Path.GetFullPath(searchString);
+
+            if (!searchString.StartsWith(path))
+                throw new ForbiddenAudioFileLocationException();
+
+            if (!File.Exists(path))
+                throw new AudioFileNotFoundException();
+
+            return new LocalFileLinkInfo(path);
+        }
+
         var match = Youtube1Regex.Match(searchString);
         if (match.Success)
         {
@@ -54,20 +72,6 @@ public class Linker
         {
             return new SoundcloudLinkInfo($"https://soundcloud.com/{match.Groups["author"]}/{match.Groups["track"]}",
                 match.Groups["author"].Value, match.Groups["track"].Value);
-        }
-
-        foreach (string location in _allowedAudioLocations)
-        {
-            if (!searchString.StartsWith(location)) continue;
-
-            string path = Path.GetFullPath(searchString);
-
-            if (!searchString.StartsWith(path)) continue;
-
-            if (!File.Exists(path))
-                continue;
-
-            return new LocalFileLinkInfo(path);
         }
 
         return null;
