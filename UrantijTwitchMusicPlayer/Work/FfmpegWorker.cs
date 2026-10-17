@@ -1,8 +1,18 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace UrantijTwitchMusicPlayer.Work;
+
+public class FfmpegParseResult(string? artist, string? title, string? album, TimeSpan duration, double lufs)
+{
+    public string? Artist { get; } = artist;
+    public string? Title { get; } = title;
+    public string? Album { get; } = album;
+    public TimeSpan Duration { get; } = duration;
+    public double Lufs { get; } = lufs;
+}
 
 public class FfmpegWorker
 {
@@ -10,6 +20,10 @@ public class FfmpegWorker
 
     // TODO атрибут
     private readonly Regex Reggexx = new("I:\\s*(?<lufs>.+) LUFS", RegexOptions.Compiled);
+
+    // Duration: 00:04:23.37, start: 0.000000, bitrate: 5338 kb/s
+    private readonly Regex AudioDataRegex =
+        new(@"Duration: (?<duration>[\d\.:]+), start: (.+?) bitrate: ", RegexOptions.Compiled);
 
     private readonly string _ffmpegPath;
 
@@ -19,7 +33,7 @@ public class FfmpegWorker
     }
 
     // TODO канцелятион
-    public async Task<double> LufsAsync(string targetPath, CancellationToken cancellationToken = default)
+    public async Task<FfmpegParseResult> LufsAsync(string targetPath, CancellationToken cancellationToken = default)
     {
         using Process process = new();
 
@@ -40,7 +54,64 @@ public class FfmpegWorker
 
         process.Start();
 
-        Task<string> errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        //       Metadata:
+        // ALBUM           : サクラノ詩 ヴォーカルCD
+        // ARTIST          : monet
+        // comment         : 163 key(Don't modify):cEgtqHxwpdRKcBCRPBlPktlHhmrTcizixpMvRszN1/t01RXkRMIbbZ03dHP6iSpQTkeB63cM6S9ZirsgIbKnZ7HrNFhd72MteheD3GIdx+RBVrHi2P55iGQ06ubJ5Nr0GJxxkZRPMWpJJqc3DgknyO2lc33CMmPaP1oZxYRA1KxPGsteR6cTudVevWrWb1d+CnOXlOg9njuDl9zYyht7bAroJ2UEzcUQp+zKTxsze
+        // ENCODER         : Lavf58.45.100
+        // TITLE           : ZYPRESSENの花束
+        // track           : 4
+
+        // Duration: 00:04:23.37, start: 0.000000, bitrate: 5338 kb/s
+
+        string? artist = null; // TODO сделать бы, но впадлу
+        string? title = null;
+        string? album = null;
+        TimeSpan? duration = null;
+        double? lufs = null;
+
+        Task errorTask = Task.Run(async () =>
+        {
+            bool ending = false;
+
+            while (true)
+            {
+                string? readLine = await process.StandardError.ReadLineAsync(cancellationToken);
+
+                if (readLine == null)
+                    return;
+
+                if (ending)
+                {
+                    if (lufs == null)
+                    {
+                        var match = Reggexx.Match(readLine);
+
+                        if (match.Success)
+                        {
+                            lufs = double.Parse(match.Groups["lufs"].Value);
+                        }
+                    }
+                }
+                else if (readLine.StartsWith("[Parsed_ebur128_0 @"))
+                {
+                    ending = true;
+                }
+                else
+                {
+                    if (duration == null)
+                    {
+                        var audioDataRegex = AudioDataRegex.Match(readLine);
+
+                        if (audioDataRegex.Success)
+                        {
+                            duration = TimeSpan.Parse(audioDataRegex.Groups["duration"].Value);
+                            continue;
+                        }
+                    }
+                }
+            }
+        });
 
         //[Parsed_ebur128_0 @ 0x7f9ad80029c0] Summary:
 
@@ -57,25 +128,17 @@ public class FfmpegWorker
         //   True peak:
         //     Peak:        1.3 dBFS
 
-
-        string text = await errorTask;
+        await errorTask;
 
         cancellationRegistration.Unregister();
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        int start = text.IndexOf("Integrated loudness:", StringComparison.Ordinal);
+        if (lufs == null || duration == null)
+            throw new Exception(); // TODO
 
-        string targetText = text.Substring(start);
+        FfmpegParseResult result = new(artist, title, album, duration.Value, lufs.Value);
 
-        var match = Reggexx.Match(targetText);
-
-        if (!match.Success)
-        {
-            // TODO
-            throw new Exception();
-        }
-
-        return double.Parse(match.Groups["lufs"].Value);
+        return result;
     }
 }

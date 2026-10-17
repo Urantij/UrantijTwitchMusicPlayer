@@ -217,7 +217,8 @@ public class MainWorker : IHostedService
             else
             {
                 _logger.LogInformation("Вычисляем луфсы...");
-                lufs = await _ffmpeg.LufsAsync(filePath, request.Cts.Token);
+                FfmpegParseResult parseResult = await _ffmpeg.LufsAsync(filePath, request.Cts.Token);
+                lufs = parseResult.Lufs;
 
                 await _database.AddTrackCacheAsync(genericLink, lufs, DateTimeOffset.UtcNow);
             }
