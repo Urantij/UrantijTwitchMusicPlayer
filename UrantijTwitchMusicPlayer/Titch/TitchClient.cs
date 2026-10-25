@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
 using TwitchSimpleLib.Chat;
 using TwitchSimpleLib.Chat.Messages;
-using UrantijTwitchMusicPlayer.Work;
 
 namespace UrantijTwitchMusicPlayer.Titch;
 

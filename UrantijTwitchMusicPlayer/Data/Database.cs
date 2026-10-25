@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 using UrantijTwitchMusicPlayer.Shared.Data;
 using UrantijTwitchMusicPlayer.Shared.Data.Models;
 
