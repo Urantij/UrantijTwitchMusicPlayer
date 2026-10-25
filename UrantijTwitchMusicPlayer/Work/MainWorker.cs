@@ -1,7 +1,6 @@
 using TwitchSimpleLib.Chat.Messages;
 using UrantijTwitchMusicPlayer.Data;
 using UrantijTwitchMusicPlayer.Routes;
-using UrantijTwitchMusicPlayer.Shared.Data.Models;
 using UrantijTwitchMusicPlayer.Titch;
 using UrantijTwitchMusicPlayer.Work.Links;
 
@@ -35,8 +34,7 @@ public class MainWorker : IHostedService
 {
     private readonly TitchClient _titch;
     private readonly MpvWorker _mpv;
-    private readonly YtDlpWorker _ytlp;
-    private readonly FfmpegWorker _ffmpeg;
+    private readonly Piper _piper;
     private readonly CacheWorker _cache;
     private readonly Linker _linker;
     private readonly Database _database;
@@ -48,14 +46,13 @@ public class MainWorker : IHostedService
 
     public double? CurrentTrackLufs { get; private set; }
 
-    public MainWorker(TitchClient titch, MpvWorker mpv, YtDlpWorker ytlp, FfmpegWorker ffmpeg, CacheWorker cache,
+    public MainWorker(TitchClient titch, MpvWorker mpv, Piper piper, CacheWorker cache,
         Linker linker,
         Database database, ILogger<MainWorker> logger)
     {
         _titch = titch;
         _mpv = mpv;
-        _ytlp = ytlp;
-        _ffmpeg = ffmpeg;
+        _piper = piper;
         _cache = cache;
         _linker = linker;
         _database = database;
@@ -182,6 +179,7 @@ public class MainWorker : IHostedService
             }
         }
 
+        PipingController? piping = null;
         string? filePath = null;
 
         if (request.Ev.LinkInfo is YoutubeLinkInfo or SoundcloudLinkInfo)
@@ -190,7 +188,11 @@ public class MainWorker : IHostedService
 
             if (filePath == null)
             {
-                filePath = await _ytlp.DownloadAsync(request.Ev.LinkInfo.Link, request.Cts.Token);
+                // TODO короч кансел тут может оставить временный файл не удалённым
+                piping = await _piper.PipeAsync(request.Ev.LinkInfo.Link, request.Cts.Token);
+                await piping.FfmpegTask.StartingTask;
+                await Task.Delay(TimeSpan.FromMilliseconds(250), request.Cts.Token);
+                filePath = piping.TmpFilePath;
             }
         }
         else if (request.Ev.LinkInfo is LocalFileLinkInfo)
@@ -199,87 +201,33 @@ public class MainWorker : IHostedService
         }
         else
         {
+            // TODO убрать всё говно тут
             throw new Exception($"че ты накодил епт {request.Ev.LinkInfo.GetType().Name}");
         }
-
-        double lufs;
-        {
-            string genericLink = _linker.MakeGenericLink(request.Ev.LinkInfo);
-            TrackCachedData? cache = await _database.FindTrackCacheAsync(genericLink);
-
-            if (cache != null)
-            {
-                _logger.LogInformation("Нашли луфс в бд");
-                lufs = cache.Lufs;
-
-                await _database.UpdateTrackCacheDateAsync(cache.Id, DateTimeOffset.UtcNow);
-            }
-            else
-            {
-                _logger.LogInformation("Вычисляем луфсы...");
-                FfmpegParseResult parseResult = await _ffmpeg.LufsAsync(filePath, request.Cts.Token);
-                lufs = parseResult.Lufs;
-
-                await _database.AddTrackCacheAsync(genericLink, lufs, DateTimeOffset.UtcNow);
-            }
-
-            CurrentTrackLufs = lufs;
-        }
-
-        double volume = _mpv.CalculateVolumePercentForLufs(lufs);
 
         string trackData = Path.GetFileNameWithoutExtension(filePath);
 
         {
             if (request.Ev is TitchMusicEvent titch)
             {
-                _logger.LogInformation("Ставим трек {data} ({lufs:N2}) от {name}", trackData, lufs,
-                    titch.TwitchUserName);
+                _logger.LogInformation("Ставим трек {data} от {name}", trackData, titch.TwitchUserName);
             }
             else
             {
-                _logger.LogInformation("Ставим трек {data} ({lufs:N2})", trackData, lufs);
+                _logger.LogInformation("Ставим трек {data}", trackData);
             }
         }
 
-        await _mpv.SetPlayerThingAsync(filePath, volume);
+        await _mpv.SetPlayerTrackAsync(filePath);
 
-        int requestId;
-        {
-            DateTimeOffset now = DateTimeOffset.UtcNow;
+        // оказалось не нужно
+        // if (piping?.Thumbnail != null)
+        // {
+        //     _logger.LogInformation("Докидываем видео");
+        //     await _mpv.AddVideoAsync(piping.Thumbnail.TmpPath);
+        // }
 
-            if (request.Ev is TitchMusicEvent titch)
-            {
-                int? userId = await _database.GetTwitchUserIdAsync(titch.TwitchUserId);
-
-                if (userId == null)
-                {
-                    userId = await _database.AddTwitchUserAsync(titch.TwitchUserId, titch.TwitchUserName);
-                }
-
-                requestId =
-                    await _database.AddTwitchRequestAsync(userId.Value, titch.Text, request.Ev.LinkInfo.Link, trackData,
-                        now);
-            }
-            else if (request.Ev is ApiMusicEvent api)
-            {
-                if (api.BehalfTwitchUsername != null)
-                {
-                    requestId =
-                        await _database.AddApiRequestAsync(request.Ev.LinkInfo.Link, trackData, now,
-                            twitchUserDbId.Value);
-                }
-                else
-                {
-                    requestId =
-                        await _database.AddApiRequestAsync(request.Ev.LinkInfo.Link, trackData, now);
-                }
-            }
-            else
-            {
-                throw new Exception($"че ты накодил епт {request.Ev.LinkInfo.GetType().Name}");
-            }
-        }
+        int requestId = await WriteRequestToDbAsync(request, trackData, twitchUserDbId);
 
         lock (_lock)
         {
@@ -288,5 +236,61 @@ public class MainWorker : IHostedService
                 request.RequestId = requestId;
             }
         }
+
+        if (piping == null)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await piping.FfmpegTask.FinishTask;
+            }
+            catch
+            {
+                _piper.CancelPipingController(piping);
+                return;
+            }
+            finally
+            {
+                piping.Yt.Process.Dispose();
+                piping.FfmpegTask.Process.Dispose();
+            }
+
+            _logger.LogInformation("Мирно закрываем ффмпег таск {path}", piping.TmpFilePath);
+
+            _piper.FinishPipingController(piping);
+        });
+    }
+
+    private async Task<int> WriteRequestToDbAsync(RequestInProgress request, string trackData, int? twitchUserDbId)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        if (request.Ev is TitchMusicEvent titch)
+        {
+            int? userId = await _database.GetTwitchUserIdAsync(titch.TwitchUserId);
+
+            if (userId == null)
+            {
+                userId = await _database.AddTwitchUserAsync(titch.TwitchUserId, titch.TwitchUserName);
+            }
+
+            return await _database.AddTwitchRequestAsync(userId.Value, titch.Text, request.Ev.LinkInfo.Link, trackData,
+                now);
+        }
+
+        if (request.Ev is ApiMusicEvent api)
+        {
+            if (api.BehalfTwitchUsername != null)
+            {
+                return await _database.AddApiRequestAsync(request.Ev.LinkInfo.Link, trackData, now,
+                    twitchUserDbId.Value);
+            }
+
+            return await _database.AddApiRequestAsync(request.Ev.LinkInfo.Link, trackData, now);
+        }
+
+        throw new Exception($"че ты накодил епт {request.Ev.LinkInfo.GetType().Name}");
     }
 }

@@ -29,6 +29,7 @@ public class TitchClient : IHostedService
     private readonly TwitchChatClient _client;
     private readonly ChatAutoChannel _channel;
     private readonly string _rewardId;
+    private readonly bool _use;
 
     private readonly List<ChatUserData> _chatUserDatas = [];
 
@@ -46,6 +47,7 @@ public class TitchClient : IHostedService
         _channel = _client.AddAutoJoinChannel(mainOptions.Value.Channel);
 
         _rewardId = mainOptions.Value.RewardId;
+        _use = mainOptions.Value.UseTwitchChat;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -90,6 +92,9 @@ public class TitchClient : IHostedService
 
             CheckChatData();
         }
+
+        if (!_use)
+            return;
 
         if (e.customRewardId != _rewardId)
         {

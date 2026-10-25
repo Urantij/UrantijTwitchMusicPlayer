@@ -127,6 +127,22 @@ public class MpvWorker : IHostedService
         await _player.SendRawCommandAsync("set_property", "volume", volume);
     }
 
+    public async Task SetPlayerTrackAsync(string filePath)
+    {
+        if (_player == null)
+            throw new Exception();
+
+        await _player.SendRawRequestAsync("loadfile", filePath, "replace");
+    }
+
+    public async Task AddVideoAsync(string filePath)
+    {
+        if (_player == null)
+            throw new Exception();
+
+        await _player.SendRawCommandAsync("video-add", filePath);
+    }
+
     public async Task SetPlayerThingAsync(string filePath, double volume)
     {
         if (_player == null)
@@ -137,7 +153,7 @@ public class MpvWorker : IHostedService
         // string escapedPath = UrlEncoder.Default.Encode(filePath);
 
         // если ставить звук, когда трека ещё нет, это ничего не сделает
-        await _player.SendRawCommandAsync("loadfile", filePath, "replace");
+        await _player.SendRawRequestAsync("loadfile", filePath, "replace");
         await _player.SendRawCommandAsync("set_property", "volume", volume);
     }
 

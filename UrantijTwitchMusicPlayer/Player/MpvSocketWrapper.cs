@@ -11,9 +11,7 @@ namespace UrantijTwitchMusicPlayer.Player;
 [JsonSerializable(typeof(int))]
 [JsonSerializable(typeof(float))]
 [JsonSerializable(typeof(double))]
-internal partial class MpvJsonContext : JsonSerializerContext
-{
-}
+internal partial class MpvJsonContext : JsonSerializerContext;
 
 // https://github.com/mpv-player/mpv/blob/master/DOCS/man/ipc.rst
 
@@ -141,7 +139,10 @@ public class MpvSocketWrapper : IDisposable
                 JsonNode? requestIdNode = obj["request_id"];
 
                 if (requestIdNode == null)
+                {
+                    _logger.LogDebug("Сообщение от мпв {msg}", line);
                     continue;
+                }
 
                 int requestId = requestIdNode.GetValue<int>();
 

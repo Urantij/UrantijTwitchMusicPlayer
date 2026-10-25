@@ -14,8 +14,17 @@ public class FfmpegParseResult(string? artist, string? title, string? album, Tim
     public double Lufs { get; } = lufs;
 }
 
+public class FfmpegPipingController(Process process, Task startingTask, Task finishTask)
+{
+    public Process Process { get; } = process;
+    public Task StartingTask { get; } = startingTask;
+    public Task FinishTask { get; } = finishTask;
+}
+
 public class FfmpegWorker
 {
+    private readonly ILogger<FfmpegWorker> _logger;
+
     // ffmpeg -hide_banner -nostats -i &quot;$audio&quot; -af ebur128=framelog=verbose:dualmono=true:peak=true -f null - 2>&1
 
     // TODO атрибут
@@ -25,11 +34,100 @@ public class FfmpegWorker
     private readonly Regex AudioDataRegex =
         new(@"Duration: (?<duration>[\d\.:]+), start: (.+?) bitrate: ", RegexOptions.Compiled);
 
-    private readonly string _ffmpegPath;
+    private readonly Regex FfmpegStreamLine =
+        // new(@"Stream #0:0\((.+?)\): Audio: (.+?), (.+?) Hz, stereo, fltp (default)", RegexOptions.Compiled);
+        new(@"Stream #0:0\((.+?)\): Audio: (.+?), (.+?) Hz", RegexOptions.Compiled);
 
-    public FfmpegWorker(IOptions<MainConfig> mainOptions)
+    private readonly string _ffmpegPath;
+    private readonly bool _displayStats;
+
+    public FfmpegWorker(IOptions<MainConfig> mainOptions, ILogger<FfmpegWorker> logger)
     {
+        _logger = logger;
         _ffmpegPath = mainOptions.Value.FfmpegPath;
+        _displayStats = mainOptions.Value.DisplayFfmpegStats;
+    }
+
+    public FfmpegPipingController PipeToFile(Stream stream, string filePath,
+        List<(string key, string value)> meta,
+        CancellationToken cancellationToken = default)
+    {
+        Process process = new();
+
+        process.StartInfo.FileName = _ffmpegPath;
+        process.StartInfo.ArgumentList.Add("-hide_banner");
+        if (_displayStats)
+            process.StartInfo.ArgumentList.Add("-nostats");
+        process.StartInfo.ArgumentList.Add("-i");
+        process.StartInfo.ArgumentList.Add("pipe:0");
+        process.StartInfo.ArgumentList.Add("-c:a");
+        process.StartInfo.ArgumentList.Add("copy");
+        foreach (var pair in meta)
+        {
+            process.StartInfo.ArgumentList.Add("-metadata");
+            process.StartInfo.ArgumentList.Add($"{pair.key}={pair.value}");
+        }
+
+        process.StartInfo.ArgumentList.Add(filePath);
+
+        process.StartInfo.RedirectStandardInput = true;
+        process.StartInfo.RedirectStandardError = true;
+
+        process.Start();
+
+        TaskCompletionSource startTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // TODO я не знаю нужен ли таск
+        Task inTask = Task.Run(async () =>
+        {
+            await stream.CopyToAsync(process.StandardInput.BaseStream, cancellationToken);
+            await stream.FlushAsync(cancellationToken);
+
+            await process.StandardInput.FlushAsync(cancellationToken);
+            process.StandardInput.Close();
+
+            _logger.LogInformation("{path} стрим аутпут закончился", filePath);
+        }, cancellationToken);
+
+        Task errTask = Task.Run(async () =>
+        {
+            bool seenTheLight = false;
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                string? errLine = await process.StandardError.ReadLineAsync(cancellationToken);
+
+                if (errLine == null)
+                {
+                    startTcs.TrySetException(new Exception("не дождались линии"));
+                    return;
+                }
+
+                if (seenTheLight)
+                    continue;
+
+                if (!FfmpegStreamLine.IsMatch(errLine))
+                    continue;
+
+                _logger.LogDebug("Нашли свет");
+
+                seenTheLight = true;
+
+                startTcs.SetResult();
+            }
+        }, cancellationToken);
+
+        Task finishTask = Task.Run(async () =>
+        {
+            await process.WaitForExitAsync(cancellationToken);
+            await inTask;
+            await errTask;
+
+            if (process.ExitCode != 0)
+                throw new Exception($"екзит код {process.ExitCode}");
+        }, cancellationToken);
+
+        return new FfmpegPipingController(process, startTcs.Task, finishTask);
     }
 
     // TODO канцелятион

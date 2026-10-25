@@ -9,6 +9,7 @@ using UrantijTwitchMusicPlayer.Shared.Data;
 using UrantijTwitchMusicPlayer.Titch;
 using UrantijTwitchMusicPlayer.Work;
 using UrantijTwitchMusicPlayer.Work.Links;
+using UrantijTwitchMusicPlayer.Work.Yt;
 
 namespace UrantijTwitchMusicPlayer;
 
@@ -17,6 +18,12 @@ class Program
     static void Main(string[] args)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(args);
+
+        builder.Logging.ClearProviders();
+        builder.Logging.AddSimpleConsole(c =>
+        {
+            c.TimestampFormat = "[HH:mm:ss] ";
+        });
 
         builder.Services.AddDbContextFactory<MyContext>(optionsBuilder =>
         {
@@ -58,6 +65,7 @@ class Program
         builder.Services.AddSingleton<FfmpegWorker>();
         builder.Services.AddSingleton<YtDlpWorker>();
         builder.Services.AddSingleton<CacheWorker>();
+        builder.Services.AddSingleton<Piper>();
 
         builder.Services.AddSingleton<MpvWorker>();
         builder.Services.AddHostedService<MpvWorker>(p => p.GetRequiredService<MpvWorker>());

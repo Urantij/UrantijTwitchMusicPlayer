@@ -6,17 +6,18 @@ namespace UrantijTwitchMusicPlayer.Player;
 
 public class MpvPlayerHandler
 {
-    private const string SocketPath = "/tmp/mpv-socket";
-
     private readonly Process? _process;
+    private readonly string _socketPath;
     private readonly IServiceProvider _provider;
     private readonly ILogger _logger;
 
     private MpvSocketWrapper? _socket;
 
-    private MpvPlayerHandler(Process? process, IServiceProvider provider, ILogger logger)
+    private MpvPlayerHandler(Process? process, string socketPath, IServiceProvider provider,
+        ILogger<MpvPlayerHandler> logger)
     {
         _process = process;
+        _socketPath = socketPath;
         _provider = provider;
         _logger = logger;
     }
@@ -31,7 +32,7 @@ public class MpvPlayerHandler
 
         await Task.Delay(1000);
 
-        _socket = await MpvSocketWrapper.CreateAsync(SocketPath, _provider);
+        _socket = await MpvSocketWrapper.CreateAsync(_socketPath, _provider);
     }
 
     public void Stop()
@@ -62,10 +63,12 @@ public class MpvPlayerHandler
         IOptions<MainConfig> mainOptions = provider.GetRequiredService<IOptions<MainConfig>>();
         ILogger<MpvPlayerHandler> logger = provider.GetRequiredService<ILogger<MpvPlayerHandler>>();
 
+        string socketPath = mainOptions.Value.MpvSocketPath;
+
         bool createProcess = true;
         if (mainOptions.Value.TryMpvExistingSocket)
         {
-            if (File.Exists(SocketPath))
+            if (File.Exists(socketPath))
             {
                 createProcess = false;
             }
@@ -78,7 +81,7 @@ public class MpvPlayerHandler
 
             process = new Process();
 
-            process.StartInfo.ArgumentList.Add($"--input-ipc-server={SocketPath}");
+            process.StartInfo.ArgumentList.Add($"--input-ipc-server={socketPath}");
             process.StartInfo.ArgumentList.Add("--keep-open");
             process.StartInfo.ArgumentList.Add("--idle");
             process.StartInfo.ArgumentList.Add("--force-window");
@@ -91,7 +94,7 @@ public class MpvPlayerHandler
         }
 
         MpvPlayerHandler mpvPlayerHandler =
-            new(process, provider, logger);
+            new(process, socketPath, provider, logger);
 
         return mpvPlayerHandler;
     }
