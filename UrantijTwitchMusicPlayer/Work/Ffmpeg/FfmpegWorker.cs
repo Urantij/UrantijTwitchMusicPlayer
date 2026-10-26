@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
-namespace UrantijTwitchMusicPlayer.Work;
+namespace UrantijTwitchMusicPlayer.Work.Ffmpeg;
 
 public class FfmpegParseResult(string? artist, string? title, string? album, TimeSpan duration, double lufs)
 {
@@ -36,6 +36,8 @@ public class FfmpegWorker
     private readonly Regex FfmpegStreamLine =
         // new(@"Stream #0:0\((.+?)\): Audio: (.+?), (.+?) Hz, stereo, fltp (default)", RegexOptions.Compiled);
         new(@"Stream #0:0\((.+?)\): Audio: (.+?), (.+?) Hz", RegexOptions.Compiled);
+
+    public static readonly Regex NumberRegex = new(@" (?<number>-{0,1}\d+?\.\d+?) ", RegexOptions.Compiled);
 
     private readonly string _ffmpegPath;
     private readonly bool _displayStats;

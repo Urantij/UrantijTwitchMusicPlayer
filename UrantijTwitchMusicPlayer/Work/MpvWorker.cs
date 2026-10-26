@@ -87,6 +87,31 @@ public class MpvWorker : IHostedService
         _baseVolumeDb = 60 * (Math.Pow(_targetVolumePercent / 100.0, 1.0 / 3.0) - 1.0);
     }
 
+    // вайбкод))
+    public double CalculateAoVolumeDb(double trackLufs, double truePeak)
+    {
+        // 1. Вычисляем желаемое усиление
+        double gain = _targetLufs - trackLufs;
+
+        // 2. Считаем лимит безопасности на основе True Peak
+        // Запас в -0.1 или -0.2 дБ оставляем, чтобы точно не клипповало
+        double maxSafeGain = -0.1 - truePeak;
+
+        // 3. Если мы хотим сделать громче (gain > 0), проверяем, безопасно ли это
+        if (gain > 0 && gain > maxSafeGain)
+        {
+            // Если лимит безопасности позволяет хоть немного усилить — усиливаем до лимита.
+            // Если лимит отрицательный (уже клиппует), то gain станет меньше нуля (приглушит трек).
+            gain = maxSafeGain;
+        }
+
+        // Жесткий лимит снизу/сверху на всякий случай
+        if (gain < -30.0) gain = -30.0;
+        if (gain > 12.0) gain = 12.0;
+
+        return Math.Round(gain, 2);
+    }
+
     public double CalculateVolumePercentForLufs(double trackLufs)
     {
         // 1. Находим чистую разницу в дБ. 
