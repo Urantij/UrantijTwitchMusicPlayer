@@ -5,7 +5,7 @@ namespace UrantijTwitchMusicPlayer.Work.Ffmpeg;
 public class Ebur128Result(
     Ebur128Result.IL integratedLoudness,
     Ebur128Result.LR loudnessRange,
-    Ebur128Result.TP truePeak)
+    Ebur128Result.TP truePeak) : ILufsAnalyze
 {
     public struct IL
     {
@@ -29,18 +29,23 @@ public class Ebur128Result(
     public IL IntegratedLoudness { get; } = integratedLoudness;
     public LR LoudnessRange { get; } = loudnessRange;
     public TP TruePeak { get; } = truePeak;
+
+    public double GetI() => IntegratedLoudness.I;
+    public double GetThreshold() => IntegratedLoudness.Threshold;
+    public double GetLra() => LoudnessRange.LRA;
+    public double GetTruePeak() => TruePeak.Peak;
 }
 
 public class Ebur128
 {
-    public static bool CheckIfEbur128Start(string line)
+    public static bool CheckIfStart(string line)
     {
         // [Parsed_ebur128_0 @ 0x7f78800029c0] Summary:59.5x elapsed=0:00:02.50    
 
         return line.StartsWith("[Parsed_ebur128_0 @");
     }
 
-    public static async Task<Ebur128Result> ReadErrStreamForEbur128Async(StreamReader errReader,
+    public static async Task<Ebur128Result> ReadErrStreamAsync(StreamReader errReader,
         CancellationToken cancellationToken)
     {
         async Task<double> ParseLineAsync()

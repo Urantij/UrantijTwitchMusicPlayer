@@ -13,11 +13,23 @@ public class FfmpegParseResult(string? artist, string? title, string? album, Tim
     public double Lufs { get; } = lufs;
 }
 
-public class FfmpegPipingController(Process process, Task startingTask, Task finishTask)
+public class FfmpegPipingController(
+    Process process,
+    Task startingTask,
+    Task<ILufsAnalyze>? analyzeTask,
+    Task finishTask)
 {
     public Process Process { get; } = process;
     public Task StartingTask { get; } = startingTask;
+    public Task<ILufsAnalyze>? AnalyzeTask { get; } = analyzeTask;
     public Task FinishTask { get; } = finishTask;
+}
+
+public enum LufzAnalyzeType
+{
+    None,
+    Ebur,
+    Loudnorm
 }
 
 public class FfmpegWorker
@@ -50,7 +62,7 @@ public class FfmpegWorker
     }
 
     public FfmpegPipingController PipeToFile(Stream stream, string filePath,
-        List<(string key, string value)> meta,
+        List<(string key, string value)> meta, LufzAnalyzeType lufzAnalyzeType,
         CancellationToken cancellationToken = default)
     {
         Process process = new();
@@ -70,6 +82,36 @@ public class FfmpegWorker
         }
 
         process.StartInfo.ArgumentList.Add(filePath);
+
+        TaskCompletionSource<ILufsAnalyze>? analyzeTcs = null;
+        if (lufzAnalyzeType == LufzAnalyzeType.Ebur)
+        {
+            process.StartInfo.ArgumentList.Add("-filter_complex");
+            process.StartInfo.ArgumentList.Add("[0:a]ebur128=framelog=verbose:dualmono=true:peak=true[out_analyze]");
+            process.StartInfo.ArgumentList.Add("-map");
+            process.StartInfo.ArgumentList.Add("[out_analyze]");
+            process.StartInfo.ArgumentList.Add("-f");
+            process.StartInfo.ArgumentList.Add("null");
+            process.StartInfo.ArgumentList.Add("-");
+
+            analyzeTcs = new TaskCompletionSource<ILufsAnalyze>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        else if (lufzAnalyzeType == LufzAnalyzeType.Loudnorm)
+        {
+            process.StartInfo.ArgumentList.Add("-filter_complex");
+            process.StartInfo.ArgumentList.Add("[0:a]loudnorm=print_format=json[out_analyze]");
+            process.StartInfo.ArgumentList.Add("-map");
+            process.StartInfo.ArgumentList.Add("[out_analyze]");
+            process.StartInfo.ArgumentList.Add("-f");
+            process.StartInfo.ArgumentList.Add("null");
+            process.StartInfo.ArgumentList.Add("-");
+
+            analyzeTcs = new TaskCompletionSource<ILufsAnalyze>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        else if (lufzAnalyzeType != LufzAnalyzeType.None)
+        {
+            _logger.LogWarning("Пришёл неизвестный типок {type}", lufzAnalyzeType);
+        }
 
         process.StartInfo.RedirectStandardInput = true;
         process.StartInfo.RedirectStandardError = true;
@@ -93,6 +135,7 @@ public class FfmpegWorker
         Task errTask = Task.Run(async () =>
         {
             bool seenTheLight = false;
+            ILufsAnalyze? lufsAnalyze = null;
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -105,7 +148,33 @@ public class FfmpegWorker
                 }
 
                 if (seenTheLight)
+                {
+                    if (lufsAnalyze != null)
+                        continue;
+
+                    if (lufzAnalyzeType == LufzAnalyzeType.Ebur)
+                    {
+                        if (Ebur128.CheckIfStart(errLine))
+                        {
+                            lufsAnalyze =
+                                await Ebur128.ReadErrStreamAsync(process.StandardError, cancellationToken);
+
+                            analyzeTcs?.SetResult(lufsAnalyze);
+                        }
+                    }
+                    else if (lufzAnalyzeType == LufzAnalyzeType.Loudnorm)
+                    {
+                        if (Loudnorm.CheckIfStart(errLine))
+                        {
+                            lufsAnalyze =
+                                await Loudnorm.ReadErrStreamAsync(process.StandardError, cancellationToken);
+
+                            analyzeTcs?.SetResult(lufsAnalyze);
+                        }
+                    }
+
                     continue;
+                }
 
                 if (!FfmpegStreamLine.IsMatch(errLine))
                     continue;
@@ -128,7 +197,7 @@ public class FfmpegWorker
                 throw new Exception($"екзит код {process.ExitCode}");
         }, cancellationToken);
 
-        return new FfmpegPipingController(process, startTcs.Task, finishTask);
+        return new FfmpegPipingController(process, startTcs.Task, analyzeTcs?.Task, finishTask);
     }
 
     // TODO канцелятион

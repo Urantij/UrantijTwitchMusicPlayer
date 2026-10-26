@@ -71,7 +71,7 @@ public class Piper : IDisposable
         _logger.LogInformation("Пишем {loc}", tmpFilePath);
 
         FfmpegPipingController ffmpegTask = _ffmpeg.PipeToFile(controller.Process.StandardOutput.BaseStream,
-            tmpFilePath, metadata,
+            tmpFilePath, metadata, LufzAnalyzeType.None,
             cancellationToken);
 
         if (!_downloadThumbnail)
