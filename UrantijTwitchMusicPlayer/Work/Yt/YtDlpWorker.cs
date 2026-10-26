@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace UrantijTwitchMusicPlayer.Work.Yt;
@@ -25,6 +25,9 @@ public class YtDlpWorker
     private readonly ILogger _logger;
     private readonly string _location;
     private readonly string? _proxyUrl;
+
+    // ERROR: [youtube] dyqbYEQ_a6g: Video unavailable
+    private readonly Regex _errorRegex = new(@"^ERROR: \[youtube\] (.+?): (?<text>.+)$");
 
     public YtDlpWorker(IOptions<MainConfig> mainOptions, ILogger<YtDlpWorker> logger)
     {
@@ -62,112 +65,27 @@ public class YtDlpWorker
 
             Task<YtDlpDump> errorTask = Task.Run<YtDlpDump>(async () =>
             {
-                // byte[] buffer = new byte[500];
-                // // TODO ну че за лист емае
-                // List<byte> bytes = new();
-                //
-                // CancellationToken errorReadToken = cancellationToken;
-                //
-                // CancellationTokenSource? timeoutCts = null;
-                // CancellationTokenSource? resultCts = null;
-                // while (!cancellationToken.IsCancellationRequested)
-                // {
-                //     int read;
-                //     try
-                //     {
-                //         read = await process.StandardError.BaseStream.ReadAsync(buffer, 0, 500, errorReadToken);
-                //     }
-                //     catch (OperationCanceledException)
-                //     {
-                //         if (cancellationToken.IsCancellationRequested)
-                //             throw;
-                //
-                //         break;
-                //     }
-                //
-                //     if (timeoutCts == null)
-                //     {
-                //         timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                //         resultCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
-                //             timeoutCts.Token);
-                //
-                //         errorReadToken = resultCts.Token;
-                //     }
-                //
-                //     bytes.AddRange(buffer.AsSpan(0, read));
-                //
-                //     if (read < 500)
-                //         break;
-                // }
-                //
-                // if (timeoutCts != null)
-                // {
-                //     resultCts.Dispose();
-                //     timeoutCts.Dispose();
-                // }
+                string? errorData = await process.StandardError.ReadLineAsync(cancellationToken);
 
-                byte[] buffer = new byte[500];
-                // TODO ну че за лист емае
-                List<byte> bytes = new();
-
-                CancellationToken errorReadToken = cancellationToken;
-
-                CancellationTokenSource? timeoutCts = null;
-                CancellationTokenSource? resultCts = null;
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    int read;
-                    try
-                    {
-                        read = await process.StandardError.BaseStream.ReadAsync(buffer, 0, 500, errorReadToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                            throw;
-
-                        break;
-                    }
-
-                    if (timeoutCts != null)
-                    {
-                        resultCts.Dispose();
-                        timeoutCts.Dispose();
-                    }
-
-                    timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-                    resultCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
-                        timeoutCts.Token);
-
-                    errorReadToken = resultCts.Token;
-
-                    bytes.AddRange(buffer.AsSpan(0, read));
-                }
-
-                if (timeoutCts != null)
-                {
-                    resultCts.Dispose();
-                    timeoutCts.Dispose();
-                }
-
-                string errorData = Encoding.UTF8.GetString(bytes.ToArray());
+                if (errorData == null)
+                    throw new Exception("Чето не пришла строка епт...");
 
                 // ERROR: [youtube] dyqbYEQ_a6g: Video unavailable
-                // TODO обрабатывать ошибки 
+                // TODO обрабатывать ошибки
+
+                Match errorMatch = _errorRegex.Match(errorData);
+
+                if (errorMatch.Success)
+                {
+                    string text = errorMatch.Groups["text"].Value;
+
+                    throw new Exception($"Ошибка внутри yt-dlp {text}");
+                }
 
                 try
                 {
-                    var a = (YtDlpDump)JsonSerializer.Deserialize(errorData, typeof(YtDlpDump),
+                    return (YtDlpDump)JsonSerializer.Deserialize(errorData, typeof(YtDlpDump),
                         YtDlpJsonSerializationContext.Default);
-
-                    var last = errorData.Last();
-                    Console.WriteLine($"char \"{last}\"");
-                    Console.WriteLine(last == '\n');
-                    Console.WriteLine(errorData.Count(c => c == '\n'));
-
-                    await File.WriteAllTextAsync("./test.json", errorData, cancellationToken);
-
-                    return a;
                 }
                 catch (Exception e)
                 {
