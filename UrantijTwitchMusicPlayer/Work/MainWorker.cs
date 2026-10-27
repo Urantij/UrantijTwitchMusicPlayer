@@ -1,7 +1,10 @@
+using Microsoft.Extensions.Options;
 using TwitchSimpleLib.Chat.Messages;
 using UrantijTwitchMusicPlayer.Data;
 using UrantijTwitchMusicPlayer.Routes;
+using UrantijTwitchMusicPlayer.Shared.Data.Models;
 using UrantijTwitchMusicPlayer.Titch;
+using UrantijTwitchMusicPlayer.Work.Ffmpeg;
 using UrantijTwitchMusicPlayer.Work.Links;
 
 namespace UrantijTwitchMusicPlayer.Work;
@@ -32,12 +35,17 @@ class RequestInProgress
 
 public class MainWorker : IHostedService
 {
+    private readonly string _filterName = "myname";
+
     private readonly TitchClient _titch;
     private readonly MpvWorker _mpv;
+    private readonly FfmpegWorker _ffmpeg;
     private readonly Piper _piper;
     private readonly CacheWorker _cache;
     private readonly Linker _linker;
     private readonly Database _database;
+
+    private readonly MainConfig _config;
 
     private readonly ILogger _logger;
 
@@ -46,16 +54,18 @@ public class MainWorker : IHostedService
 
     public double? CurrentTrackLufs { get; private set; }
 
-    public MainWorker(TitchClient titch, MpvWorker mpv, Piper piper, CacheWorker cache,
+    public MainWorker(TitchClient titch, MpvWorker mpv, FfmpegWorker ffmpeg, Piper piper, CacheWorker cache,
         Linker linker,
-        Database database, ILogger<MainWorker> logger)
+        Database database, IOptions<MainConfig> mainOptions, ILogger<MainWorker> logger)
     {
         _titch = titch;
         _mpv = mpv;
+        _ffmpeg = ffmpeg;
         _piper = piper;
         _cache = cache;
         _linker = linker;
         _database = database;
+        _config = mainOptions.Value;
         _logger = logger;
     }
 
@@ -182,6 +192,20 @@ public class MainWorker : IHostedService
         PipingController? piping = null;
         string? filePath = null;
 
+        string genericLink = _linker.MakeGenericLink(request.Ev.LinkInfo);
+
+        TrackCachedData? cacheData = await _database.FindTrackCacheAsync(genericLink);
+
+        ILufsAnalyze? analyze = null;
+
+        if (cacheData != null)
+        {
+            // это не та модель но я не буду длетьа новую модель
+            analyze = new LoudnormResult(cacheData.I, cacheData.TruePeak, cacheData.Lra, cacheData.Threshold);
+
+            await _database.UpdateTrackCacheDateAsync(cacheData.Id, DateTimeOffset.UtcNow);
+        }
+
         if (request.Ev.LinkInfo is YoutubeLinkInfo or SoundcloudLinkInfo)
         {
             filePath = _cache.Find(request.Ev.LinkInfo);
@@ -189,7 +213,8 @@ public class MainWorker : IHostedService
             if (filePath == null)
             {
                 // TODO короч кансел тут может оставить временный файл не удалённым
-                piping = await _piper.PipeAsync(request.Ev.LinkInfo.Link, request.Cts.Token);
+                piping = await _piper.PipeAsync(request.Ev.LinkInfo.Link,
+                    analyze != null ? LufzAnalyzeType.None : _config.MpvAnalyzeType, request.Cts.Token);
                 await piping.FfmpegTask.StartingTask;
                 await Task.Delay(TimeSpan.FromMilliseconds(250), request.Cts.Token);
                 filePath = piping.TmpFilePath;
@@ -198,6 +223,16 @@ public class MainWorker : IHostedService
         else if (request.Ev.LinkInfo is LocalFileLinkInfo)
         {
             filePath = request.Ev.LinkInfo.Link;
+
+            if (analyze == null && _config.MpvAnalyzeType != LufzAnalyzeType.None)
+            {
+                FfmpegParseResult parseResult =
+                    await _ffmpeg.AnalyzeAsync(filePath, _config.MpvAnalyzeType, request.Cts.Token);
+
+                analyze = parseResult.Analyze;
+
+                cacheData = await _database.AddTrackCacheAsync(genericLink, parseResult.Analyze, DateTimeOffset.UtcNow);
+            }
         }
         else
         {
@@ -218,7 +253,53 @@ public class MainWorker : IHostedService
             }
         }
 
-        await _mpv.SetPlayerTrackAsync(filePath);
+
+        bool postFilter = false;
+        if (piping?.FfmpegTask.AnalyzeTask != null)
+        {
+            if (piping.Yt.Dump.Filesize <= _config.MpvLargeFileThreshold)
+            {
+                analyze = await piping.FfmpegTask.AnalyzeTask;
+
+                cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                postFilter = true;
+            }
+        }
+
+        string initFilter;
+        if (_config.MpvAnalyzeType == LufzAnalyzeType.None || analyze == null)
+        {
+            initFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+                _config.MpvTargetOnePasLra);
+        }
+        else
+        {
+            initFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+                _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
+                analyze.GetThreshold());
+        }
+
+        SongHandler song = await _mpv.SetPlayerTrackAsync(filePath, -1, initFilter);
+
+        Task? postTask = null;
+        if (postFilter)
+        {
+            postTask = Task.Run(async () =>
+            {
+                analyze = await piping.FfmpegTask.AnalyzeTask;
+
+                initFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+                    _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
+                    analyze.GetThreshold());
+
+                await _mpv.UpdatePlayerFilterAsync(song, initFilter);
+
+                cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
+            });
+        }
 
         // оказалось не нужно
         // if (piping?.Thumbnail != null)
@@ -245,6 +326,10 @@ public class MainWorker : IHostedService
             try
             {
                 await piping.FfmpegTask.FinishTask;
+
+                // TODO его краши могут быть не связаны, нужно как то отдельно.
+                if (postTask != null)
+                    await postTask;
             }
             catch
             {

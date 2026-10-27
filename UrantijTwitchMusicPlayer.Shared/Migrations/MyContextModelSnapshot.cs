@@ -15,7 +15,7 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
             modelBuilder.Entity("UrantijTwitchMusicPlayer.Shared.Data.Models.RequestApiData", b =>
                 {
@@ -85,6 +85,9 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
                     b.Property<DateTimeOffset>("CreationDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("I")
+                        .HasColumnType("REAL");
+
                     b.Property<DateTimeOffset>("LastCheckDate")
                         .HasColumnType("TEXT");
 
@@ -92,7 +95,13 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<double>("Lufs")
+                    b.Property<double>("Lra")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Threshold")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("TruePeak")
                         .HasColumnType("REAL");
 
                     b.HasKey("Id");

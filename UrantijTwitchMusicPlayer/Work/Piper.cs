@@ -51,7 +51,8 @@ public class Piper : IDisposable
         _logger = logger;
     }
 
-    public async Task<PipingController> PipeAsync(string url, CancellationToken cancellationToken = default)
+    public async Task<PipingController> PipeAsync(string url, LufzAnalyzeType lufzAnalyzeType,
+        CancellationToken cancellationToken = default)
     {
         YtDlpController controller = await _yt.StreamDownloadAsync(url, cancellationToken);
 
@@ -71,8 +72,7 @@ public class Piper : IDisposable
         _logger.LogInformation("Пишем {loc}", tmpFilePath);
 
         FfmpegPipingController ffmpegTask = _ffmpeg.PipeToFile(controller.Process.StandardOutput.BaseStream,
-            tmpFilePath, metadata, LufzAnalyzeType.None,
-            cancellationToken);
+            tmpFilePath, metadata, lufzAnalyzeType, cancellationToken);
 
         if (!_downloadThumbnail)
             return new PipingController(controller, tmpFilePath, thumbnail, ffmpegTask);

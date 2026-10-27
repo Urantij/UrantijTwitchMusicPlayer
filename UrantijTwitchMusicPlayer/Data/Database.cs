@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using UrantijTwitchMusicPlayer.Shared.Data;
 using UrantijTwitchMusicPlayer.Shared.Data.Models;
+using UrantijTwitchMusicPlayer.Work.Ffmpeg;
 
 namespace UrantijTwitchMusicPlayer.Data;
 
@@ -157,14 +158,17 @@ public class Database
             .FirstOrDefaultAsync();
     }
 
-    public async Task AddTrackCacheAsync(string link, double lufs, DateTimeOffset date)
+    public async Task<TrackCachedData> AddTrackCacheAsync(string link, ILufsAnalyze analyze, DateTimeOffset date)
     {
         await using MyContext context = await CreateContextAsync();
 
         TrackCachedData data = new()
         {
             Link = link,
-            Lufs = lufs,
+            I = analyze.GetI(),
+            Threshold = analyze.GetThreshold(),
+            Lra = analyze.GetLra(),
+            TruePeak = analyze.GetTruePeak(),
             CreationDate = date,
             LastCheckDate = date
         };
@@ -172,6 +176,8 @@ public class Database
         context.TrackCache.Add(data);
 
         await context.SaveChangesAsync();
+
+        return data;
     }
 
     public async Task UpdateTrackCacheDateAsync(int id, DateTimeOffset lastDate)

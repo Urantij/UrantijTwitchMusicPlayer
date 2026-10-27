@@ -63,7 +63,20 @@ public class Loudnorm
         double lra = await ParseLineAsync();
         double thresh = await ParseLineAsync();
 
-
         return new LoudnormResult(i, tp, lra, thresh);
+    }
+
+    public static string LoudnormString(string name, double i, double tp, double lra)
+    {
+        // @my_normalizer:loudnorm=I=-14:TP=-1.0:LRA=7:measured_I=-7.4:measured_TP=0.0:measured_LRA=8.5:measured_thresh=-17.8
+
+        return $"@{name}:loudnorm=I={i}:TP={tp}:LRA={lra}";
+    }
+
+    public static string LoudnormString(string name, double i, double tp, double lra,
+        double measuredI, double measuredTp, double measuredLra, double measuredThresh)
+    {
+        return
+            $"@{name}:loudnorm=I={i}:TP={tp}:LRA={lra}:measured_I={measuredI}:measured_TP={measuredTp}:measured_LRA={measuredLra}:measured_thresh={measuredThresh}";
     }
 }

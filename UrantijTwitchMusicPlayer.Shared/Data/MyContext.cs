@@ -13,6 +13,11 @@ public class MyContext : DbContext
     {
     }
 
+    [Obsolete("не юзай лол")]
+    public MyContext()
+    {
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         optionsBuilder.UseSqlite("Data Source=db.sqlite;");

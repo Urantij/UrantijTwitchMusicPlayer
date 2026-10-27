@@ -5,11 +5,16 @@ using UrantijTwitchMusicPlayer.Player;
 
 namespace UrantijTwitchMusicPlayer.Work;
 
+public class SongHandler(string filePath)
+{
+    public string FilePath { get; } = filePath;
+}
+
 public class MpvWorker : IHostedService
 {
     private MpvPlayerHandler? _player;
 
-    private readonly Lock _locker = new();
+    private readonly SemaphoreSlim _locker = new(0, 1);
 
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<MpvWorker> _logger;
@@ -26,6 +31,8 @@ public class MpvWorker : IHostedService
     private double _targetVolumePercent;
     private double _targetLufs;
     private double _baseVolumeDb;
+
+    private SongHandler? _song;
 
     public MpvWorker(IServiceProvider serviceProvider, IOptions<MainConfig> mainOptions, ILogger<MpvWorker> logger)
     {
@@ -147,49 +154,136 @@ public class MpvWorker : IHostedService
         if (_player == null)
             throw new Exception();
 
-        _logger.LogInformation("Поставили громкость {volume}%", volume);
+        await _locker.WaitAsync();
+        try
+        {
+            _logger.LogInformation("Поставили громкость {volume}%", volume);
 
-        await _player.SendRawCommandAsync("set_property", "volume", volume);
+            await _player.SendRawCommandAsync("set_property", "volume", volume);
+        }
+        finally
+        {
+            _locker.Release();
+        }
     }
 
-    public async Task SetPlayerTrackAsync(string filePath)
+    public async Task UpdatePlayerVolumeAsync(SongHandler song, double volume)
     {
         if (_player == null)
             throw new Exception();
 
-        await _player.SendRawRequestAsync("loadfile", filePath, "replace");
+        await _locker.WaitAsync();
+        try
+        {
+            if (_song != song)
+                return;
+
+            _logger.LogInformation("Поставили громкость {volume}%", volume);
+
+            await _player.SendRawCommandAsync("set_property", "volume", volume);
+        }
+        finally
+        {
+            _locker.Release();
+        }
     }
 
-    public async Task AddVideoAsync(string filePath)
+    public async Task UpdatePlayerFilterAsync(SongHandler song, string filter)
     {
         if (_player == null)
             throw new Exception();
 
-        await _player.SendRawCommandAsync("video-add", filePath);
+        await _locker.WaitAsync();
+        try
+        {
+            if (_song != song)
+                return;
+
+            _logger.LogInformation("Меняем фильтер на {filter}", filter);
+
+            await _player.SendRawRequestAsync("set_property", "af", filter);
+        }
+        finally
+        {
+            _locker.Release();
+        }
     }
 
-    public async Task SetPlayerThingAsync(string filePath, double volume)
+    public async Task<SongHandler> SetPlayerTrackAsync(string filePath)
     {
         if (_player == null)
             throw new Exception();
 
-        // https://mpv.io/manual/stable/#command-interface-[%3Coptions%3E]]]
+        await _locker.WaitAsync();
+        try
+        {
+            await _player.SendRawRequestAsync("loadfile", filePath, "replace");
 
-        // string escapedPath = UrlEncoder.Default.Encode(filePath);
+            _song = new SongHandler(filePath);
 
-        // если ставить звук, когда трека ещё нет, это ничего не сделает
-        await _player.SendRawRequestAsync("loadfile", filePath, "replace");
-        await _player.SendRawCommandAsync("set_property", "volume", volume);
+            return _song;
+        }
+        finally
+        {
+            _locker.Release();
+        }
     }
+
+    public async Task<SongHandler> SetPlayerTrackAsync(string filePath, int index, string additionalArg)
+    {
+        if (_player == null)
+            throw new Exception();
+
+        await _locker.WaitAsync();
+        try
+        {
+            await _player.SendRawRequestAsync("loadfile", filePath, "replace", index, additionalArg);
+
+            _song = new SongHandler(filePath);
+
+            return _song;
+        }
+        finally
+        {
+            _locker.Release();
+        }
+    }
+
+    // public async Task AddVideoAsync(string filePath)
+    // {
+    //     if (_player == null)
+    //         throw new Exception();
+    //
+    //     await _player.SendRawCommandAsync("video-add", filePath);
+    // }
+
+    // public async Task SetPlayerThingAsync(string filePath, double volume)
+    // {
+    //     if (_player == null)
+    //         throw new Exception();
+    //
+    //     // https://mpv.io/manual/stable/#command-interface-[%3Coptions%3E]]]
+    //
+    //     // string escapedPath = UrlEncoder.Default.Encode(filePath);
+    //
+    //     // если ставить звук, когда трека ещё нет, это ничего не сделает
+    //     await _player.SendRawRequestAsync("loadfile", filePath, "replace");
+    //     await _player.SendRawCommandAsync("set_property", "volume", volume);
+    // }
 
     public async Task CreateWindowAsync()
     {
-        lock (_locker)
+        await _locker.WaitAsync();
+        try
         {
             if (_player != null)
                 throw new Exception();
 
             _player = MpvPlayerHandler.Create(_serviceProvider);
+        }
+        finally
+        {
+            _locker.Release();
         }
 
         await _player.StartAsync();
@@ -197,13 +291,20 @@ public class MpvWorker : IHostedService
 
     public void CloseWindow()
     {
-        lock (_locker)
+        _locker.Wait();
+        try
         {
             if (_player == null)
                 throw new Exception();
 
             _player.Stop();
             _player = null;
+
+            _song = null;
+        }
+        finally
+        {
+            _locker.Release();
         }
     }
 }
