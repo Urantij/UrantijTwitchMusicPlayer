@@ -10,10 +10,16 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.RenameColumn(
+            migrationBuilder.DropColumn(
                 name: "Lufs",
+                table: "TrackCache");
+            
+            migrationBuilder.AddColumn<double>(
+                name: "I",
                 table: "TrackCache",
-                newName: "I");
+                type: "REAL",
+                nullable: false,
+                defaultValue: 0.0);
 
             migrationBuilder.AddColumn<double>(
                 name: "TruePeak",
@@ -43,6 +49,10 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
             migrationBuilder.DropColumn(
                 name: "I",
                 table: "TrackCache");
+            
+            migrationBuilder.DropColumn(
+                name: "TruePeak",
+                table: "TrackCache");
 
             migrationBuilder.DropColumn(
                 name: "Lra",
@@ -52,10 +62,12 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
                 name: "Threshold",
                 table: "TrackCache");
 
-            migrationBuilder.RenameColumn(
-                name: "I",
+            migrationBuilder.AddColumn<double>(
+                name: "Lufs",
                 table: "TrackCache",
-                newName: "Lufs");
+                type: "REAL",
+                nullable: false,
+                defaultValue: 0.0);
         }
     }
 }
