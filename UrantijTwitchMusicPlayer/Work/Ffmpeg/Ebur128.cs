@@ -38,6 +38,8 @@ public class Ebur128Result(
 
 public class Ebur128
 {
+    private static readonly Regex NumberRegex = new(@" (?<number>-{0,1}\d+?\.\d+?) ", RegexOptions.Compiled);
+
     public static bool CheckIfStart(string line)
     {
         // [Parsed_ebur128_0 @ 0x7f78800029c0] Summary:59.5x elapsed=0:00:02.50    
@@ -55,7 +57,7 @@ public class Ebur128
             if (line == null)
                 throw new Exception("I: null");
 
-            Match m = FfmpegWorker.NumberRegex.Match(line);
+            Match m = NumberRegex.Match(line);
 
             if (!m.Success)
                 throw new Exception($"не парсится блин {line}");

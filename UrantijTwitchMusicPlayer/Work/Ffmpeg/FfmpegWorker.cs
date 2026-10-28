@@ -49,8 +49,6 @@ public class FfmpegWorker
         // new(@"Stream #0:0\((.+?)\): Audio: (.+?), (.+?) Hz, stereo, fltp (default)", RegexOptions.Compiled);
         new(@"Stream #0:0\((.+?)\): Audio: (.+?), (.+?) Hz", RegexOptions.Compiled);
 
-    public static readonly Regex NumberRegex = new(@" (?<number>-{0,1}\d+?\.\d+?) ", RegexOptions.Compiled);
-
     private readonly string _ffmpegPath;
     private readonly bool _displayStats;
 

@@ -17,6 +17,10 @@ public class LoudnormResult(double inputI, double inputTp, double inputLra, doub
 
 public class Loudnorm
 {
+    private static readonly Regex NumberRegex = new("""
+                                                    "(?<number>-{0,1}\d+?\.\d+?)"
+                                                    """, RegexOptions.Compiled);
+
     public static bool CheckIfStart(string line)
     {
         // [Parsed_loudnorm_0 @ 0x7f53600029c0]   
@@ -34,7 +38,7 @@ public class Loudnorm
             if (line == null)
                 throw new Exception("I: null");
 
-            Match m = FfmpegWorker.NumberRegex.Match(line);
+            Match m = NumberRegex.Match(line);
 
             if (!m.Success)
                 throw new Exception($"не парсится блин {line}");
