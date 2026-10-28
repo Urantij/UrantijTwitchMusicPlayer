@@ -305,24 +305,24 @@ public class MainWorker : IHostedService
             }
         }
 
-        string initFilter;
+        string addArg;
         if (_config.MpvAnalyzeType == LufzAnalyzeType.None || analyze == null)
         {
             _logger.LogInformation("Один ступенька нормализация");
 
-            initFilter = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+            addArg = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
                 _config.MpvTargetOnePasLra);
         }
         else
         {
             _logger.LogInformation("Два ступенька нормализация");
 
-            initFilter = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+            addArg = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
                 _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
                 analyze.GetThreshold());
         }
 
-        SongHandler song = await _mpv.SetPlayerTrackAsync(filePath, -1, initFilter);
+        SongHandler song = await _mpv.SetPlayerTrackAsync(filePath, -1, addArg);
 
         Task? postTask = null;
         if (postFilter)
@@ -333,11 +333,12 @@ public class MainWorker : IHostedService
 
                 _logger.LogInformation("Два ступенька нормализация в постобработке");
 
-                initFilter = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+                string updateFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI,
+                    _config.MpvTargetTruePeak,
                     _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
                     analyze.GetThreshold());
 
-                await _mpv.UpdatePlayerFilterAsync(song, initFilter);
+                await _mpv.UpdatePlayerFilterAsync(song, updateFilter);
 
                 cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
             });
