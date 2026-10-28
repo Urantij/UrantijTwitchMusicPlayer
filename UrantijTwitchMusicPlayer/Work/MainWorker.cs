@@ -172,6 +172,8 @@ public class MainWorker : IHostedService
 
     private async Task RunRewardAsync(RequestInProgress request)
     {
+        _logger.LogDebug("раним ревард {link}", request.Ev.LinkInfo.Link);
+
         int? twitchUserDbId = null;
         if (request.Ev is ApiMusicEvent { BehalfTwitchUsername: not null } apiMusicEvent)
         {
@@ -189,14 +191,14 @@ public class MainWorker : IHostedService
             }
         }
 
-        PipingController? piping = null;
         string? filePath = null;
+        ILufsAnalyze? analyze = null;
+
+        PipingController? piping = null;
 
         string genericLink = _linker.MakeGenericLink(request.Ev.LinkInfo);
 
         TrackCachedData? cacheData = await _database.FindTrackCacheAsync(genericLink);
-
-        ILufsAnalyze? analyze = null;
 
         if (cacheData != null)
         {
@@ -218,6 +220,17 @@ public class MainWorker : IHostedService
                 await piping.FfmpegTask.StartingTask;
                 await Task.Delay(TimeSpan.FromMilliseconds(250), request.Cts.Token);
                 filePath = piping.TmpFilePath;
+            }
+            else if (analyze == null && _config.MpvAnalyzeType != LufzAnalyzeType.None)
+            {
+                // TODO здесь юзается не асинхронный вариант нормализации
+
+                FfmpegParseResult parseResult =
+                    await _ffmpeg.AnalyzeAsync(filePath, _config.MpvAnalyzeType, request.Cts.Token);
+
+                analyze = parseResult.Analyze;
+
+                cacheData = await _database.AddTrackCacheAsync(genericLink, parseResult.Analyze, DateTimeOffset.UtcNow);
             }
         }
         else if (request.Ev.LinkInfo is LocalFileLinkInfo)
@@ -242,6 +255,12 @@ public class MainWorker : IHostedService
 
         string trackData = Path.GetFileNameWithoutExtension(filePath);
 
+        // костылёк но хули делать епт)
+        if (trackData.EndsWith(".tmp"))
+        {
+            trackData = trackData.Substring(0, trackData.Length - ".tmp".Length);
+        }
+
         {
             if (request.Ev is TitchMusicEvent titch)
             {
@@ -252,7 +271,6 @@ public class MainWorker : IHostedService
                 _logger.LogInformation("Ставим трек {data}", trackData);
             }
         }
-
 
         bool postFilter = false;
         if (piping?.FfmpegTask.AnalyzeTask != null)
@@ -319,10 +337,15 @@ public class MainWorker : IHostedService
         }
 
         if (piping == null)
+        {
+            _logger.LogDebug("ревард маленький конец {link}", request.Ev.LinkInfo.Link);
             return;
+        }
 
         _ = Task.Run(async () =>
         {
+            _logger.LogDebug("ревард пост процесс {link}", request.Ev.LinkInfo.Link);
+
             try
             {
                 await piping.FfmpegTask.FinishTask;
@@ -331,8 +354,15 @@ public class MainWorker : IHostedService
                 if (postTask != null)
                     await postTask;
             }
-            catch
+            catch (TaskCanceledException)
             {
+                _piper.CancelPipingController(piping);
+                return;
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning(e, "епты блин а че то ффмпег не смог завершить работу блин...");
+
                 _piper.CancelPipingController(piping);
                 return;
             }
@@ -341,6 +371,8 @@ public class MainWorker : IHostedService
                 piping.Yt.Process.Dispose();
                 piping.FfmpegTask.Process.Dispose();
             }
+
+            _logger.LogDebug("ревард пост процесс конец {link}", request.Ev.LinkInfo.Link);
 
             _logger.LogInformation("Мирно закрываем ффмпег таск {path}", piping.TmpFilePath);
 
