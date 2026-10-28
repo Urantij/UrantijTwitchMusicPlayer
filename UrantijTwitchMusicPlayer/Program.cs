@@ -21,10 +21,7 @@ class Program
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(args);
 
         builder.Logging.ClearProviders();
-        builder.Logging.AddSimpleConsole(c =>
-        {
-            c.TimestampFormat = "[HH:mm:ss] ";
-        });
+        builder.Logging.AddSimpleConsole(c => { c.TimestampFormat = "[HH:mm:ss] "; });
 
         builder.Services.AddDbContextFactory<MyContext>(optionsBuilder =>
         {
