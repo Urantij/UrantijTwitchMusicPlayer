@@ -14,7 +14,7 @@ public class MpvWorker : IHostedService
 {
     private MpvPlayerHandler? _player;
 
-    private readonly SemaphoreSlim _locker = new(0, 1);
+    private readonly SemaphoreSlim _locker = new(1, 1);
 
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<MpvWorker> _logger;

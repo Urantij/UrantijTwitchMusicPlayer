@@ -202,6 +202,8 @@ public class MainWorker : IHostedService
 
         if (cacheData != null)
         {
+            _logger.LogDebug("Нашли кешдату");
+
             // это не та модель но я не буду длетьа новую модель
             analyze = new LoudnormResult(cacheData.I, cacheData.TruePeak, cacheData.Lra, cacheData.Threshold);
 
@@ -218,7 +220,20 @@ public class MainWorker : IHostedService
                 piping = await _piper.PipeAsync(request.Ev.LinkInfo.Link,
                     analyze != null ? LufzAnalyzeType.None : _config.MpvAnalyzeType, request.Cts.Token);
                 await piping.FfmpegTask.StartingTask;
-                await Task.Delay(TimeSpan.FromMilliseconds(250), request.Cts.Token);
+
+                while (!request.Cts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(100), request.Cts.Token);
+
+                    if (!File.Exists(piping.TmpFilePath))
+                        continue;
+
+                    FileInfo fileInfo = new(piping.TmpFilePath);
+
+                    if (fileInfo.Length > _config.MpvMinFileSize || piping.FfmpegTask.FinishTask.IsCompleted)
+                        break;
+                }
+
                 filePath = piping.TmpFilePath;
             }
             else if (analyze == null && _config.MpvAnalyzeType != LufzAnalyzeType.None)
@@ -277,12 +292,15 @@ public class MainWorker : IHostedService
         {
             if (piping.Yt.Dump.Filesize <= _config.MpvLargeFileThreshold)
             {
+                _logger.LogDebug("Файл небольшой, подождём его тутачки");
+
                 analyze = await piping.FfmpegTask.AnalyzeTask;
 
                 cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
             }
             else
             {
+                _logger.LogDebug("ой блять файл сука здоровенный нахуй заебёт ждать");
                 postFilter = true;
             }
         }
@@ -290,12 +308,16 @@ public class MainWorker : IHostedService
         string initFilter;
         if (_config.MpvAnalyzeType == LufzAnalyzeType.None || analyze == null)
         {
-            initFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+            _logger.LogInformation("Один ступенька нормализация");
+
+            initFilter = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
                 _config.MpvTargetOnePasLra);
         }
         else
         {
-            initFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+            _logger.LogInformation("Два ступенька нормализация");
+
+            initFilter = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
                 _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
                 analyze.GetThreshold());
         }
@@ -309,7 +331,9 @@ public class MainWorker : IHostedService
             {
                 analyze = await piping.FfmpegTask.AnalyzeTask;
 
-                initFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+                _logger.LogInformation("Два ступенька нормализация в постобработке");
+
+                initFilter = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
                     _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
                     analyze.GetThreshold());
 

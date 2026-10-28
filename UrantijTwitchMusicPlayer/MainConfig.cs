@@ -24,7 +24,7 @@ public class MainConfig
     public bool AutoStartMpv { get; set; } = true;
     public bool TryMpvExistingSocket { get; set; } = false;
     public string MpvSocketPath { get; set; } = "/tmp/mpv-socket";
-    public double MpvTargetI { get; set; } = 14;
+    public double MpvTargetI { get; set; } = -14;
     public double MpvTargetTruePeak { get; set; } = -1;
     public double MpvTargetTwoPassLra { get; set; } = 7;
     public double MpvTargetOnePasLra { get; set; } = 14;
@@ -35,6 +35,7 @@ public class MainConfig
     // 3 мегабайта обрабатывалось 13.6 секунд, 1 мегабайт это 4.53 секунд на 1 мегабайт.
     // но ебур128 быстрее нахуй в 5 раз, что тоже кабутабы немаловажно. гугл говорил юзать лауднорм, но мне впадлу ждать.
     public long MpvLargeFileThreshold { get; set; } = 1024 * 1024 * 12;
+    public long MpvMinFileSize { get; set; } = 1024 * 100;
 
     public string AudioCacheLocation { get; set; } = "/home/punky/Music/karina/stream/";
 
