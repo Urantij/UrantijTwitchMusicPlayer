@@ -16,6 +16,7 @@ public class MainConfig
 
     public string? YoutubeProxyUrl { get; set; }
     public bool DownloadThumbnail { get; set; } = true;
+    public long DownloadFileMaxPermittedSize { get; set; } = 1024 * 1024 * 100;
 
     public string FfmpegPath { get; set; } = "ffmpeg";
     public bool DisplayFfmpegStats { get; set; } = false;

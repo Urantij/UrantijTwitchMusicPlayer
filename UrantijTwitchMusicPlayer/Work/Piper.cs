@@ -30,6 +30,7 @@ public class Piper : IDisposable
     private readonly HttpClient _http;
     private readonly string _location;
     private readonly bool _downloadThumbnail;
+    private readonly long _crashFileSize;
     private readonly ILogger _logger;
 
     public Piper(YtDlpWorker yt, FfmpegWorker ffmpeg, IOptions<MainConfig> mainOptions,
@@ -48,6 +49,7 @@ public class Piper : IDisposable
         _http = new HttpClient(handler, true);
         _location = mainOptions.Value.AudioCacheLocation;
         _downloadThumbnail = mainOptions.Value.DownloadThumbnail;
+        _crashFileSize = mainOptions.Value.DownloadFileMaxPermittedSize;
         _logger = logger;
     }
 
@@ -61,6 +63,9 @@ public class Piper : IDisposable
             // тута ошибка случилась ептыть)))
             throw new Exception("Ютуп закрылся раньше нужного))");
         }
+
+        if (controller.Dump.Filesize > _crashFileSize)
+            throw new Exception($"блять там файл пиздец здоровый ты че ебанутый?? {controller.Dump.Filesize}");
 
         string tmpFileName = GenerateFileName(controller.Dump, true);
         string tmpFilePath = Path.Combine(_location, tmpFileName);
