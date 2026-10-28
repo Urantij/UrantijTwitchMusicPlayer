@@ -167,6 +167,8 @@ public class MainWorker : IHostedService
         catch (Exception e)
         {
             _logger.LogWarning(e, "обработку не йес йес");
+
+            await current.Cts.CancelAsync();
         }
     }
 
