@@ -76,8 +76,21 @@ public class Piper : IDisposable
 
         _logger.LogInformation("Пишем {loc}", tmpFilePath);
 
-        FfmpegPipingController ffmpegTask = _ffmpeg.PipeToFile(controller.Process.StandardOutput.BaseStream,
-            tmpFilePath, metadata, lufzAnalyzeType, cancellationToken);
+        FfmpegPipingController ffmpegTask;
+
+        // TODO не оч элегантно но хули делать епт
+        try
+        {
+            ffmpegTask = _ffmpeg.PipeToFile(controller.Process.StandardOutput.BaseStream,
+                tmpFilePath, metadata, lufzAnalyzeType, cancellationToken);
+        }
+        catch
+        {
+            if (File.Exists(tmpFilePath))
+                File.Delete(tmpFilePath);
+
+            throw;
+        }
 
         if (!_downloadThumbnail)
             return new PipingController(controller, tmpFilePath, thumbnail, ffmpegTask);
@@ -98,6 +111,9 @@ public class Piper : IDisposable
         }
         catch (OperationCanceledException)
         {
+            if (File.Exists(imgPath))
+                File.Delete(imgPath);
+
             throw;
         }
         catch (Exception e)

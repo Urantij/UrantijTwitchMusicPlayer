@@ -198,213 +198,225 @@ public class MainWorker : IHostedService
 
         PipingController? piping = null;
 
-        string genericLink = _linker.MakeGenericLink(request.Ev.LinkInfo);
-
-        TrackCachedData? cacheData = await _database.FindTrackCacheAsync(genericLink);
-
-        if (cacheData != null)
+        try
         {
-            _logger.LogDebug("Нашли кешдату");
+            string genericLink = _linker.MakeGenericLink(request.Ev.LinkInfo);
 
-            // это не та модель но я не буду длетьа новую модель
-            analyze = new LoudnormResult(cacheData.I, cacheData.TruePeak, cacheData.Lra, cacheData.Threshold);
+            TrackCachedData? cacheData = await _database.FindTrackCacheAsync(genericLink);
 
-            await _database.UpdateTrackCacheDateAsync(cacheData.Id, DateTimeOffset.UtcNow);
-        }
-
-        if (request.Ev.LinkInfo is YoutubeLinkInfo or SoundcloudLinkInfo)
-        {
-            filePath = _cache.Find(request.Ev.LinkInfo);
-
-            if (filePath == null)
+            if (cacheData != null)
             {
-                // TODO короч кансел тут может оставить временный файл не удалённым
-                piping = await _piper.PipeAsync(request.Ev.LinkInfo.Link,
-                    analyze != null ? LufzAnalyzeType.None : _config.MpvAnalyzeType, request.Cts.Token);
-                await piping.FfmpegTask.StartingTask;
+                _logger.LogDebug("Нашли кешдату");
 
-                while (!request.Cts.Token.IsCancellationRequested)
+                // это не та модель но я не буду длетьа новую модель
+                analyze = new LoudnormResult(cacheData.I, cacheData.TruePeak, cacheData.Lra, cacheData.Threshold);
+
+                await _database.UpdateTrackCacheDateAsync(cacheData.Id, DateTimeOffset.UtcNow);
+            }
+
+            if (request.Ev.LinkInfo is YoutubeLinkInfo or SoundcloudLinkInfo)
+            {
+                filePath = _cache.Find(request.Ev.LinkInfo);
+
+                if (filePath == null)
                 {
-                    await Task.Delay(TimeSpan.FromMilliseconds(100), request.Cts.Token);
+                    // TODO короч кансел тут может оставить временный файл не удалённым
+                    piping = await _piper.PipeAsync(request.Ev.LinkInfo.Link,
+                        analyze != null ? LufzAnalyzeType.None : _config.MpvAnalyzeType, request.Cts.Token);
+                    await piping.FfmpegTask.StartingTask;
 
-                    if (!File.Exists(piping.TmpFilePath))
-                        continue;
+                    while (!request.Cts.Token.IsCancellationRequested)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(100), request.Cts.Token);
 
-                    FileInfo fileInfo = new(piping.TmpFilePath);
+                        if (!File.Exists(piping.TmpFilePath))
+                            continue;
 
-                    if (fileInfo.Length > _config.MpvMinFileSize || piping.FfmpegTask.FinishTask.IsCompleted)
-                        break;
+                        FileInfo fileInfo = new(piping.TmpFilePath);
+
+                        if (fileInfo.Length > _config.MpvMinFileSize || piping.FfmpegTask.FinishTask.IsCompleted)
+                            break;
+                    }
+
+                    filePath = piping.TmpFilePath;
                 }
+                else if (analyze == null && _config.MpvAnalyzeType != LufzAnalyzeType.None)
+                {
+                    // TODO здесь юзается не асинхронный вариант нормализации
 
-                filePath = piping.TmpFilePath;
+                    FfmpegParseResult parseResult =
+                        await _ffmpeg.AnalyzeAsync(filePath, _config.MpvAnalyzeType, request.Cts.Token);
+
+                    analyze = parseResult.Analyze;
+
+                    cacheData = await _database.AddTrackCacheAsync(genericLink, parseResult.Analyze,
+                        DateTimeOffset.UtcNow);
+                }
             }
-            else if (analyze == null && _config.MpvAnalyzeType != LufzAnalyzeType.None)
+            else if (request.Ev.LinkInfo is LocalFileLinkInfo)
             {
-                // TODO здесь юзается не асинхронный вариант нормализации
+                filePath = request.Ev.LinkInfo.Link;
 
-                FfmpegParseResult parseResult =
-                    await _ffmpeg.AnalyzeAsync(filePath, _config.MpvAnalyzeType, request.Cts.Token);
+                if (analyze == null && _config.MpvAnalyzeType != LufzAnalyzeType.None)
+                {
+                    FfmpegParseResult parseResult =
+                        await _ffmpeg.AnalyzeAsync(filePath, _config.MpvAnalyzeType, request.Cts.Token);
 
-                analyze = parseResult.Analyze;
+                    analyze = parseResult.Analyze;
 
-                cacheData = await _database.AddTrackCacheAsync(genericLink, parseResult.Analyze, DateTimeOffset.UtcNow);
-            }
-        }
-        else if (request.Ev.LinkInfo is LocalFileLinkInfo)
-        {
-            filePath = request.Ev.LinkInfo.Link;
-
-            if (analyze == null && _config.MpvAnalyzeType != LufzAnalyzeType.None)
-            {
-                FfmpegParseResult parseResult =
-                    await _ffmpeg.AnalyzeAsync(filePath, _config.MpvAnalyzeType, request.Cts.Token);
-
-                analyze = parseResult.Analyze;
-
-                cacheData = await _database.AddTrackCacheAsync(genericLink, parseResult.Analyze, DateTimeOffset.UtcNow);
-            }
-        }
-        else
-        {
-            // TODO убрать всё говно тут
-            throw new Exception($"че ты накодил епт {request.Ev.LinkInfo.GetType().Name}");
-        }
-
-        string trackData = Path.GetFileNameWithoutExtension(filePath);
-
-        // костылёк но хули делать епт)
-        if (trackData.EndsWith(".tmp"))
-        {
-            trackData = trackData.Substring(0, trackData.Length - ".tmp".Length);
-        }
-
-        {
-            if (request.Ev is TitchMusicEvent titch)
-            {
-                _logger.LogInformation("Ставим трек {data} от {name}", trackData, titch.TwitchUserName);
+                    cacheData = await _database.AddTrackCacheAsync(genericLink, parseResult.Analyze,
+                        DateTimeOffset.UtcNow);
+                }
             }
             else
             {
-                _logger.LogInformation("Ставим трек {data}", trackData);
+                // TODO убрать всё говно тут
+                throw new Exception($"че ты накодил епт {request.Ev.LinkInfo.GetType().Name}");
             }
-        }
 
-        bool postFilter = false;
-        if (piping?.FfmpegTask.AnalyzeTask != null)
-        {
-            if (piping.Yt.Dump.Filesize <= _config.MpvLargeFileThreshold)
+            string trackData = Path.GetFileNameWithoutExtension(filePath);
+
+            // костылёк но хули делать епт)
+            if (trackData.EndsWith(".tmp"))
             {
-                _logger.LogDebug("Файл небольшой, подождём его тутачки");
+                trackData = trackData.Substring(0, trackData.Length - ".tmp".Length);
+            }
 
-                analyze = await piping.FfmpegTask.AnalyzeTask;
+            {
+                if (request.Ev is TitchMusicEvent titch)
+                {
+                    _logger.LogInformation("Ставим трек {data} от {name}", trackData, titch.TwitchUserName);
+                }
+                else
+                {
+                    _logger.LogInformation("Ставим трек {data}", trackData);
+                }
+            }
 
-                cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
+            bool postFilter = false;
+            if (piping?.FfmpegTask.AnalyzeTask != null)
+            {
+                if (piping.Yt.Dump.Filesize <= _config.MpvLargeFileThreshold)
+                {
+                    _logger.LogDebug("Файл небольшой, подождём его тутачки");
+
+                    analyze = await piping.FfmpegTask.AnalyzeTask;
+
+                    cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
+                }
+                else
+                {
+                    _logger.LogDebug("ой блять файл сука здоровенный нахуй заебёт ждать");
+                    postFilter = true;
+                }
+            }
+
+            string addArg;
+            if (_config.MpvAnalyzeType == LufzAnalyzeType.None || analyze == null)
+            {
+                _logger.LogInformation("Один ступенька нормализация");
+
+                addArg = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
+                    _config.MpvTargetOnePasLra);
             }
             else
             {
-                _logger.LogDebug("ой блять файл сука здоровенный нахуй заебёт ждать");
-                postFilter = true;
-            }
-        }
+                _logger.LogInformation("Два ступенька нормализация");
 
-        string addArg;
-        if (_config.MpvAnalyzeType == LufzAnalyzeType.None || analyze == null)
-        {
-            _logger.LogInformation("Один ступенька нормализация");
-
-            addArg = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
-                _config.MpvTargetOnePasLra);
-        }
-        else
-        {
-            _logger.LogInformation("Два ступенька нормализация");
-
-            addArg = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
-                _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
-                analyze.GetThreshold());
-        }
-
-        SongHandler song = await _mpv.SetPlayerTrackAsync(filePath, -1, addArg);
-
-        Task? postTask = null;
-        if (postFilter)
-        {
-            postTask = Task.Run(async () =>
-            {
-                analyze = await piping.FfmpegTask.AnalyzeTask;
-
-                _logger.LogInformation("Два ступенька нормализация в постобработке");
-
-                string updateFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI,
-                    _config.MpvTargetTruePeak,
+                addArg = "af=" + Loudnorm.LoudnormString(_filterName, _config.MpvTargetI, _config.MpvTargetTruePeak,
                     _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
                     analyze.GetThreshold());
+            }
 
-                await _mpv.UpdatePlayerFilterAsync(song, updateFilter);
+            SongHandler song = await _mpv.SetPlayerTrackAsync(filePath, -1, addArg);
 
-                cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
+            Task? postTask = null;
+            if (postFilter)
+            {
+                postTask = Task.Run(async () =>
+                {
+                    analyze = await piping.FfmpegTask.AnalyzeTask;
+
+                    _logger.LogInformation("Два ступенька нормализация в постобработке");
+
+                    string updateFilter = Loudnorm.LoudnormString(_filterName, _config.MpvTargetI,
+                        _config.MpvTargetTruePeak,
+                        _config.MpvTargetTwoPassLra, analyze.GetI(), analyze.GetTruePeak(), analyze.GetLra(),
+                        analyze.GetThreshold());
+
+                    await _mpv.UpdatePlayerFilterAsync(song, updateFilter);
+
+                    cacheData = await _database.AddTrackCacheAsync(genericLink, analyze, DateTimeOffset.UtcNow);
+                });
+            }
+
+            // оказалось не нужно
+            // if (piping?.Thumbnail != null)
+            // {
+            //     _logger.LogInformation("Докидываем видео");
+            //     await _mpv.AddVideoAsync(piping.Thumbnail.TmpPath);
+            // }
+
+            int requestId = await WriteRequestToDbAsync(request, trackData, twitchUserDbId);
+
+            lock (_lock)
+            {
+                if (request == _inProgress)
+                {
+                    request.RequestId = requestId;
+                }
+            }
+
+            if (piping == null)
+            {
+                _logger.LogDebug("ревард маленький конец {link}", request.Ev.LinkInfo.Link);
+                return;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                _logger.LogDebug("ревард пост процесс {link}", request.Ev.LinkInfo.Link);
+
+                try
+                {
+                    await piping.FfmpegTask.FinishTask;
+
+                    // TODO его краши могут быть не связаны, нужно как то отдельно.
+                    if (postTask != null)
+                        await postTask;
+                }
+                catch (TaskCanceledException)
+                {
+                    _piper.CancelPipingController(piping);
+                    return;
+                }
+                catch (Exception e)
+                {
+                    _logger.LogWarning(e, "епты блин а че то ффмпег не смог завершить работу блин...");
+
+                    _piper.CancelPipingController(piping);
+                    return;
+                }
+                finally
+                {
+                    piping.Yt.Process.Dispose();
+                    piping.FfmpegTask.Process.Dispose();
+                }
+
+                _logger.LogDebug("ревард пост процесс конец {link}", request.Ev.LinkInfo.Link);
+
+                _logger.LogInformation("Мирно закрываем ффмпег таск {path}", piping.TmpFilePath);
+
+                _piper.FinishPipingController(piping);
             });
         }
-
-        // оказалось не нужно
-        // if (piping?.Thumbnail != null)
-        // {
-        //     _logger.LogInformation("Докидываем видео");
-        //     await _mpv.AddVideoAsync(piping.Thumbnail.TmpPath);
-        // }
-
-        int requestId = await WriteRequestToDbAsync(request, trackData, twitchUserDbId);
-
-        lock (_lock)
+        catch
         {
-            if (request == _inProgress)
-            {
-                request.RequestId = requestId;
-            }
-        }
-
-        if (piping == null)
-        {
-            _logger.LogDebug("ревард маленький конец {link}", request.Ev.LinkInfo.Link);
-            return;
-        }
-
-        _ = Task.Run(async () =>
-        {
-            _logger.LogDebug("ревард пост процесс {link}", request.Ev.LinkInfo.Link);
-
-            try
-            {
-                await piping.FfmpegTask.FinishTask;
-
-                // TODO его краши могут быть не связаны, нужно как то отдельно.
-                if (postTask != null)
-                    await postTask;
-            }
-            catch (TaskCanceledException)
-            {
+            if (piping != null)
                 _piper.CancelPipingController(piping);
-                return;
-            }
-            catch (Exception e)
-            {
-                _logger.LogWarning(e, "епты блин а че то ффмпег не смог завершить работу блин...");
 
-                _piper.CancelPipingController(piping);
-                return;
-            }
-            finally
-            {
-                piping.Yt.Process.Dispose();
-                piping.FfmpegTask.Process.Dispose();
-            }
-
-            _logger.LogDebug("ревард пост процесс конец {link}", request.Ev.LinkInfo.Link);
-
-            _logger.LogInformation("Мирно закрываем ффмпег таск {path}", piping.TmpFilePath);
-
-            _piper.FinishPipingController(piping);
-        });
+            throw;
+        }
     }
 
     private async Task<int> WriteRequestToDbAsync(RequestInProgress request, string trackData, int? twitchUserDbId)
