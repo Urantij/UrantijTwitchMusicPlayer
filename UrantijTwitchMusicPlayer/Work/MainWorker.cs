@@ -132,7 +132,7 @@ public class MainWorker : IHostedService
                 return;
             }
 
-            TitchMusicEvent ev = new(msg.userId, msg.username, msg.text, linkInfo);
+            TitchMusicEvent ev = new(msg.userId, msg.username, msg.displayName, msg.text, linkInfo);
             await AddRewardAsync(ev);
         });
     }
@@ -417,7 +417,8 @@ public class MainWorker : IHostedService
 
             if (userId == null)
             {
-                userId = await _database.AddTwitchUserAsync(titch.TwitchUserId, titch.TwitchUserName);
+                userId = await _database.AddTwitchUserAsync(titch.TwitchUserId, titch.TwitchUserName,
+                    titch.TwitchDisplayName);
             }
 
             return await _database.AddTwitchRequestAsync(userId.Value, titch.Text, request.Ev.LinkInfo.Link, trackData,

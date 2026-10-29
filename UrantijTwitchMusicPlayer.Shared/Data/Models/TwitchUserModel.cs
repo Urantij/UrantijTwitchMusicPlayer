@@ -8,6 +8,8 @@ public class TwitchUserModel
 
     public string TwitchId { get; set; }
     public string TwitchUsername { get; set; }
+    public string? TwitchDisplayname { get; set; }
 
-    public ICollection<RequestTwitchData> Datas { get; set; }
+    public ICollection<RequestTwitchData> TwitchDatas { get; set; }
+    public ICollection<RequestApiData> ApiDatas { get; set; }
 }

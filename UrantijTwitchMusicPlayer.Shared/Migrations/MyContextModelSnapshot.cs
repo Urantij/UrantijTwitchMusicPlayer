@@ -115,6 +115,9 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TwitchDisplayname")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TwitchId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -131,7 +134,7 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
             modelBuilder.Entity("UrantijTwitchMusicPlayer.Shared.Data.Models.RequestApiData", b =>
                 {
                     b.HasOne("UrantijTwitchMusicPlayer.Shared.Data.Models.TwitchUserModel", "BehalfUser")
-                        .WithMany()
+                        .WithMany("ApiDatas")
                         .HasForeignKey("BehalfUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -156,7 +159,7 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
                         .IsRequired();
 
                     b.HasOne("UrantijTwitchMusicPlayer.Shared.Data.Models.TwitchUserModel", "User")
-                        .WithMany("Datas")
+                        .WithMany("TwitchDatas")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -175,7 +178,9 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
 
             modelBuilder.Entity("UrantijTwitchMusicPlayer.Shared.Data.Models.TwitchUserModel", b =>
                 {
-                    b.Navigation("Datas");
+                    b.Navigation("ApiDatas");
+
+                    b.Navigation("TwitchDatas");
                 });
 #pragma warning restore 612, 618
         }

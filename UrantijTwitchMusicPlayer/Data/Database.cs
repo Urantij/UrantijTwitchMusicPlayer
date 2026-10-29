@@ -45,14 +45,15 @@ public class Database
             .FirstOrDefaultAsync();
     }
 
-    public async Task<int> AddTwitchUserAsync(string twitchUserId, string twitchUserName)
+    public async Task<int> AddTwitchUserAsync(string twitchUserId, string twitchUserName, string? twitchDisplayName)
     {
         await using MyContext context = await CreateContextAsync();
 
         TwitchUserModel twitchUser = new()
         {
             TwitchId = twitchUserId,
-            TwitchUsername = twitchUserName
+            TwitchUsername = twitchUserName,
+            TwitchDisplayname = twitchDisplayName
         };
 
         context.TwitchUsers.Add(twitchUser);
