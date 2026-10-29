@@ -176,15 +176,22 @@ public class MainWorker : IHostedService
     {
         _logger.LogDebug("раним ревард {link}", request.Ev.LinkInfo.Link);
 
+        // TODO оч криво. тут создаётся юзер, и потом пишет в бд рекввест и там тоже пишет юзер. и вообещ почему реквест пишет аж там?
         int? twitchUserDbId = null;
         if (request.Ev is ApiMusicEvent { BehalfTwitchUsername: not null } apiMusicEvent)
         {
-            ChatUserData? chatUserData = _titch.FindUserByUsername(apiMusicEvent.BehalfTwitchUsername);
+            twitchUserDbId =
+                await _database.GetTwitchUserIdByTwitchUsernameAsync(apiMusicEvent.BehalfTwitchUsername);
 
-            if (chatUserData == null)
+            if (twitchUserDbId == null)
             {
-                twitchUserDbId =
-                    await _database.GetTwitchUserIdByTwitchUsernameAsync(apiMusicEvent.BehalfTwitchUsername);
+                ChatUserData? chatUserData = _titch.FindUserByUsername(apiMusicEvent.BehalfTwitchUsername);
+
+                if (chatUserData != null)
+                {
+                    twitchUserDbId = await _database.AddTwitchUserAsync(chatUserData.Id, chatUserData.Username,
+                        chatUserData.DisplayName);
+                }
             }
 
             if (twitchUserDbId == null)

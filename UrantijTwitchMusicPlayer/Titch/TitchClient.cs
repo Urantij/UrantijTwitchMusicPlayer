@@ -7,12 +7,14 @@ namespace UrantijTwitchMusicPlayer.Titch;
 public class ChatUserData
 {
     public string Username { get; }
+    public string? DisplayName { get; }
     public string Id { get; }
     public DateTimeOffset LastSeenDate { get; set; }
 
-    public ChatUserData(string username, string id, DateTimeOffset lastSeenDate)
+    public ChatUserData(string username, string? displayName, string id, DateTimeOffset lastSeenDate)
     {
         Username = username;
+        DisplayName = displayName;
         Id = id;
         LastSeenDate = lastSeenDate;
     }
@@ -81,7 +83,7 @@ public class TitchClient : IHostedService
 
             if (data == null)
             {
-                data = new ChatUserData(e.username, e.userId, DateTimeOffset.UtcNow);
+                data = new ChatUserData(e.username, e.displayName, e.userId, DateTimeOffset.UtcNow);
                 _chatUserDatas.Add(data);
             }
             else
