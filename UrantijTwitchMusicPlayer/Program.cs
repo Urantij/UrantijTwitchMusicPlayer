@@ -9,6 +9,7 @@ using UrantijTwitchMusicPlayer.Shared.Data;
 using UrantijTwitchMusicPlayer.Titch;
 using UrantijTwitchMusicPlayer.Work;
 using UrantijTwitchMusicPlayer.Work.Ffmpeg;
+using UrantijTwitchMusicPlayer.Work.Leaderboard;
 using UrantijTwitchMusicPlayer.Work.Links;
 using UrantijTwitchMusicPlayer.Work.Yt;
 
@@ -65,6 +66,8 @@ class Program
         builder.Services.AddSingleton<CacheWorker>();
         builder.Services.AddSingleton<Piper>();
 
+        builder.Services.AddSingleton<LeaderboardWorker>();
+
         builder.Services.AddSingleton<MpvWorker>();
         builder.Services.AddHostedService<MpvWorker>(p => p.GetRequiredService<MpvWorker>());
 
@@ -86,6 +89,8 @@ class Program
 
         host.MapPost("/private/audio/track", AudioRoute.PostTrack);
         host.MapPost("/private/audio/sounddata", AudioRoute.PostSoundData);
+
+        host.MapGet("/private/data/leaderboard", DataRoute.GetLeaderboard);
 
         using (IServiceScope provider = host.Services.CreateScope())
         {

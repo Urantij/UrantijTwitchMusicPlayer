@@ -4,5 +4,6 @@ dotnet ef dbcontext optimize --precompile-queries --nativeaot --output-dir Compi
 
 # :)
 sed -i 's/urantijTwitchMusicPlayer\.Shared\.Data\.Models\.TrackCachedDataPrimaryKeyProperties/urantijTwitchMusicPlayerSharedDataModelsTrackCachedDataPrimaryKeyProperties/g' ./CompiledModels/Database.EFInterceptors.MyContext.cs
+sed -i 's/urantijTwitchMusicPlayer\.Shared\.Data\.Models\.RequestModelPrimaryKeyProperties/urantijTwitchMusicPlayerSharedDataModelsRequestModelPrimaryKeyProperties/g' ./CompiledModels/Database.EFInterceptors.MyContext.cs
 
 # верни юзание модели

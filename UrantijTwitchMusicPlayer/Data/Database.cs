@@ -197,4 +197,48 @@ public class Database
 
         await context.SaveChangesAsync();
     }
+
+    public async Task EnumerateAllRequestsWithDataWithoutUsersAsync(Action<RequestModel> action,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await CreateContextAsync();
+
+        // IAsyncEnumerable<TwitchUserModel> query = context.TwitchUsers.Include(u => u.TwitchDatas)
+        //     .ThenInclude(d => d.Request)
+        //     .Include(u => u.ApiDatas)
+        //     .ThenInclude(d => d.Request)
+        //     .OrderBy(u => u.Id)
+        //     .AsNoTrackingWithIdentityResolution()
+        //     .AsAsyncEnumerable();
+
+        IAsyncEnumerable<RequestModel> requests = context.Requests
+            .Include(r => r.ApiData)
+            // .ThenInclude(a => a.BehalfUser)
+            .Include(r => r.TwitchData)
+            // .ThenInclude(d => d.User)
+            .OrderBy(r => r.Id)
+            // .AsNoTrackingWithIdentityResolution() я хызы мне каж не надо. если бы всё разом грузил наверное да. а так похуй
+            .AsNoTracking()
+            .AsAsyncEnumerable();
+
+        await foreach (RequestModel request in requests)
+        {
+            action(request);
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
+
+    public async Task<ShortUserA[]> GetUsernamesFromIdsAsync(int[] ids)
+    {
+        await using var context = await CreateContextAsync();
+
+        int[] a = ids;
+
+        return await context.TwitchUsers
+            .Where(u => a.Any(id => id == u.Id)) // Contains срал мне на голову
+            .AsNoTracking()
+            .Select(u => new ShortUserA(u.Id, u.TwitchUsername, u.TwitchDisplayname))
+            .ToArrayAsync();
+    }
 }
