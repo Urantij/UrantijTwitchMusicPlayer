@@ -15,7 +15,7 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
 
             modelBuilder.Entity("UrantijTwitchMusicPlayer.Shared.Data.Models.RequestApiData", b =>
                 {

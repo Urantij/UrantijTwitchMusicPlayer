@@ -5,24 +5,13 @@
 namespace UrantijTwitchMusicPlayer.Shared.Migrations
 {
     /// <inheritdoc />
-    public partial class Lufs4 : Migration
+    public partial class AddLufsBack : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Lufs",
-                table: "TrackCache");
-            
             migrationBuilder.AddColumn<double>(
                 name: "I",
-                table: "TrackCache",
-                type: "REAL",
-                nullable: false,
-                defaultValue: 0.0);
-
-            migrationBuilder.AddColumn<double>(
-                name: "TruePeak",
                 table: "TrackCache",
                 type: "REAL",
                 nullable: false,
@@ -37,6 +26,13 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
 
             migrationBuilder.AddColumn<double>(
                 name: "Threshold",
+                table: "TrackCache",
+                type: "REAL",
+                nullable: false,
+                defaultValue: 0.0);
+
+            migrationBuilder.AddColumn<double>(
+                name: "TruePeak",
                 table: "TrackCache",
                 type: "REAL",
                 nullable: false,
@@ -49,10 +45,6 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
             migrationBuilder.DropColumn(
                 name: "I",
                 table: "TrackCache");
-            
-            migrationBuilder.DropColumn(
-                name: "TruePeak",
-                table: "TrackCache");
 
             migrationBuilder.DropColumn(
                 name: "Lra",
@@ -62,12 +54,9 @@ namespace UrantijTwitchMusicPlayer.Shared.Migrations
                 name: "Threshold",
                 table: "TrackCache");
 
-            migrationBuilder.AddColumn<double>(
-                name: "Lufs",
-                table: "TrackCache",
-                type: "REAL",
-                nullable: false,
-                defaultValue: 0.0);
+            migrationBuilder.DropColumn(
+                name: "TruePeak",
+                table: "TrackCache");
         }
     }
 }
