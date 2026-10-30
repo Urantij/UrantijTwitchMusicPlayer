@@ -47,13 +47,20 @@ public class LeaderboardWorker
             .Take(max)
             .ToArray();
 
-        ShortUserA[] names = await _database.GetUsernamesFromIdsAsync(
-            toppers.Select(t => t.Key).ToArray()
-        );
+        List<ShortUserA> namesList = [];
+        foreach (KeyValuePair<int, YaSalsyaSuka> topper in toppers)
+        {
+            ShortUserA? sua = await _database.GetUsernameFromIdAsync(topper.Key);
+
+            if (sua == null)
+                continue;
+
+            namesList.Add(sua);
+        }
 
         LeaderboardUser[] users = toppers.Select(t =>
         {
-            ShortUserA? nameObj = names.FirstOrDefault(n => n.Id == t.Key);
+            ShortUserA? nameObj = namesList.FirstOrDefault(n => n.Id == t.Key);
 
             string name = nameObj?.Displayname ?? nameObj?.Username ?? $"Id {t.Key}";
 

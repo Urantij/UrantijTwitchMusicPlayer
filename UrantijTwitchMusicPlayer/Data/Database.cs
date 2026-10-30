@@ -229,16 +229,31 @@ public class Database
         }
     }
 
-    public async Task<ShortUserA[]> GetUsernamesFromIdsAsync(int[] ids)
+    public async Task<ShortUserA?> GetUsernameFromIdAsync(int id)
     {
         await using var context = await CreateContextAsync();
 
-        int[] a = ids;
+        int a = id;
 
         return await context.TwitchUsers
-            .Where(u => a.Any(id => id == u.Id)) // Contains срал мне на голову
+            .Where(u => u.Id == a)
             .AsNoTracking()
             .Select(u => new ShortUserA(u.Id, u.TwitchUsername, u.TwitchDisplayname))
-            .ToArrayAsync();
+            .FirstOrDefaultAsync();
     }
+
+    // просто не работает в аот, хызы. если контейнс, он почему то пытается юзать object у котроого нет контейнс
+    // если юзать массив, там проёбывается какая то хуйня при триминге. короче да
+    // public async Task<ShortUserA[]> GetUsernamesFromIdsAsync(int[] ids)
+    // {
+    //     await using var context = await CreateContextAsync();
+    //
+    //     IReadOnlyList<int> a = ids;
+    //
+    //     return await context.TwitchUsers
+    //         .Where(u => a.Contains(u.Id)) // Contains срал мне на голову
+    //         .AsNoTracking()
+    //         .Select(u => new ShortUserA(u.Id, u.TwitchUsername, u.TwitchDisplayname))
+    //         .ToArrayAsync();
+    // }
 }
